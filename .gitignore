@@ -8,6 +8,8 @@ venv/
 # (Tu .gitignore original listaba cada carpeta, esto captura todas)
 **/*__pycache__/
 *.pyc
+__pycache__/
+*.pyc
 
 # 3. Ignorar archivos de IDEs (Editores de código)
 .vscode/
