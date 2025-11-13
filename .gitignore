@@ -1,0 +1,27 @@
+# 1. Ignorar el Entorno Virtual
+# (Tomado de tu .gitignore original)
+venv/
+*.venv/
+.venv/
+
+# 2. Ignorar Caches de Python (forma mejorada)
+# (Tu .gitignore original listaba cada carpeta, esto captura todas)
+**/*__pycache__/
+*.pyc
+
+# 3. Ignorar archivos de IDEs (Editores de código)
+.vscode/
+.idea/
+
+# 4. Ignorar archivos temporales de Python
+*.egg-info/
+build/
+dist/
+
+# 5. Archivos del Sistema Operativo
+.DS_Store
+Thumbs.db
+
+# 6. Archivos de prueba
+# (Tomado de tu .gitignore original)
+test.py
