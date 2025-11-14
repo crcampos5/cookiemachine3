@@ -55,11 +55,14 @@ class MachineController(QObject):
 
     @Slot()
     def find_ports(self):
+        print("--- DEBUG: Ejecutando find_ports()... ---")
         try:
             ports = serial.tools.list_ports.comports()
             port_list = [port.device for port in ports]
+            print(f"--- DEBUG: Puertos encontrados: {port_list} ---")
             self.port_list_updated.emit(port_list)
         except Exception as e:
+            print(f"--- DEBUG: ERROR en find_ports(): {e} ---")
             self.log_message.emit(f"Error al buscar puertos: {e}")
 
     @Slot(str, int)

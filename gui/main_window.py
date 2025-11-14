@@ -1,8 +1,10 @@
 """
 gui/main_window.py
 Define la ventana principal (QMainWindow) de la aplicación.
+(Versión corregida y actualizada)
 """
 
+# Eliminamos QTimer, ya no se usa
 from PySide6.QtCore import QThread, Slot
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QVBoxLayout
 
@@ -14,9 +16,6 @@ from gui.widgets.connect_panel import ConnectPanel
 from gui.widgets.info_panel import InfoPanel
 from gui.widgets.move_controls import MoveControls
 from gui.widgets.camera_widget import CameraWidget
-# (Próximos widgets a crear)
-# from gui.widgets.laser_controls import LaserControls
-# from gui.widgets.file_manager import FileManager
 
 
 class MainWindow(QMainWindow):
@@ -50,31 +49,49 @@ class MainWindow(QMainWindow):
         # Mover el objeto 'controller' al hilo 'controller_thread'
         self.controller.moveToThread(self.controller_thread)
         
-        # ¡NO MÁS QTIMER!
+        # --- LÓGICA DE QTIMER ELIMINADA ---
+        # Ya no se necesita un temporizador de sondeo (poll_timer)
+        
         print("Controlador movido a QThread.")
 
     # --- 2. Configuración de la Interfaz (Layout) ---
-    
+
     def setup_ui_layout(self):
-        # ... (Este método no cambia) ...
+        """
+        Configura el layout visual principal de la aplicación.
+        """
         main_layout = QHBoxLayout()
+        
+        # --- 1. Panel Izquierdo (Videos) ---
         left_panel_layout = QVBoxLayout()
         left_panel_layout.setContentsMargins(5, 5, 5, 5)
-        self.camera_widget = CameraWidget(camera_index=0)
+        
+        self.camera_widget = CameraWidget(camera_index=0, title="Cámara Principal")
         left_panel_layout.addWidget(self.camera_widget, stretch=1)
-        self.laser_widget = CameraWidget(camera_index=1)
+        
+        self.laser_widget = CameraWidget(camera_index=1, title="Cámara Láser")
         left_panel_layout.addWidget(self.laser_widget, stretch=1)
+
+        # --- 2. Panel Derecho (Controles) ---
         right_panel_layout = QVBoxLayout()
         right_panel_layout.setContentsMargins(5, 5, 5, 5)
+
         self.connect_panel = ConnectPanel()
         right_panel_layout.addWidget(self.connect_panel)
+
         self.info_panel = InfoPanel()
         right_panel_layout.addWidget(self.info_panel)
+
         self.move_controls = MoveControls()
         right_panel_layout.addWidget(self.move_controls)
+        
+        # Empujar todo hacia arriba
         right_panel_layout.addStretch(1)
+
+        # --- Ensamblaje Final ---
         main_layout.addLayout(left_panel_layout, stretch=3)
         main_layout.addLayout(right_panel_layout, stretch=1)
+        
         central_widget = QWidget()
         central_widget.setLayout(main_layout)
         self.setCentralWidget(central_widget)
@@ -87,36 +104,44 @@ class MainWindow(QMainWindow):
         slots (funciones) de la GUI, y viceversa.
         """
         
-        # --- A. Control de Hilos y Timer ---
+        # --- A. Control de Hilos y Conexión ---
         
-        # Conectar la señal 'started' del hilo al 'run_listener_loop'
-        # Esto inicia el bucle de escucha tan pronto como el hilo arranca.
+        # ¡CORREGIDO! Conectar 'started' al bucle de escucha
         self.controller_thread.started.connect(self.controller.run_listener_loop)
+        
+        # Buscar puertos automáticamente al iniciar
+        self.controller_thread.started.connect(self.controller.find_ports)
+        self.controller.port_list_updated.connect(self.connect_panel.update_port_list)
+        
+        # Botón de refrescar puertos
+        self.connect_panel.refresh_button.clicked.connect(self.controller.find_ports)
         
         # --- B. Conexiones del Controlador (Backend) -> GUI (Frontend) ---
         
-        # (El resto de las conexiones son las mismas)
         self.controller.connection_changed.connect(self.connect_panel.update_connection_status)
         self.controller.connection_changed.connect(self.info_panel.on_connection_changed)
+        
         self.controller.status_changed.connect(self.info_panel.update_status)
         self.controller.position_updated.connect(self.info_panel.update_position)
         self.controller.log_message.connect(self.info_panel.add_log)
         
-        # --- C. Conexiones de la GUI (Frontend) -> Controlador (Backend) ---
+        # Conectar la señal machine_ready para habilitar/deshabilitar botones
+        self.controller.machine_ready.connect(self.move_controls.set_controls_enabled)
         
-        # Actualizar el panel de conexión para buscar puertos al inicio
-        self.connect_panel.refresh_button.clicked.connect(self.controller.find_ports)
-        self.controller.port_list_updated.connect(self.connect_panel.update_port_list)
+        # --- C. Conexiones de la GUI (Frontend) -> Controlador (Backend) ---
         
         self.connect_panel.connect_button.clicked.connect(self.on_connect_button_clicked)
         self.connect_panel.disconnect_button.clicked.connect(self.controller.disconnect_serial)
         self.connect_panel.home_button.clicked.connect(self.controller.home)
+        self.connect_panel.unlock_button.clicked.connect(self.controller.unlock)
         
         self.move_controls.jog_command.connect(self.controller.send_command)
         
-        # --- D. Conexión de inicio ---
-        # Buscar puertos automáticamente al iniciar el hilo
-        self.controller_thread.started.connect(self.controller.find_ports)
+        # --- D. Conexiones de Widgets (GUI) -> Widgets (GUI) ---
+        
+        # Pasar los logs de las cámaras al panel de info
+        self.camera_widget.log_message.connect(self.info_panel.add_log)
+        self.laser_widget.log_message.connect(self.info_panel.add_log)
 
     # --- 4. Slots Personalizados (Funciones de pegamento) ---
 
@@ -128,28 +153,32 @@ class MainWindow(QMainWindow):
         """
         port = self.connect_panel.get_selected_port()
         if port:
-            # Llama al slot del controlador (que está en otro hilo)
             self.controller.connect_serial(port_name=port, baud_rate=115200)
         else:
             self.info_panel.add_log("Error: No se seleccionó ningún puerto COM.")
 
-    # --- 5. Manejo de Cierre ---
+    # --- 5. Manejo de Cierre (CORREGIDO) ---
 
     def closeEvent(self, event):
         """
         Maneja el evento de cierre de la ventana para asegurar
-        que el hilo del controlador se detenga limpiamente.
+        que todos los hilos se detengan limpiamente.
         """
         print("Cerrando aplicación...")
         
-        # 1. Indicar al bucle del controlador que se detenga
+        # 1. ¡AÑADIDO! Detener hilos de cámaras
+        if hasattr(self, 'camera_widget'):
+            self.camera_widget.stop_feed()
+        if hasattr(self, 'laser_widget'):
+            self.laser_widget.stop_feed()
+            
+        # 2. Indicar al bucle del controlador que se detenga
         if hasattr(self, 'controller'):
             self.controller.stop_listener()
             
-        # 2. Pedir al hilo que termine
+        # 3. Pedir al hilo del controlador que termine
         if hasattr(self, 'controller_thread') and self.controller_thread.isRunning():
             self.controller_thread.quit()
-            # Esperar a que el hilo termine (con un timeout)
             if not self.controller_thread.wait(3000): # 3 seg
                 print("El hilo del controlador no respondió. Forzando terminación.")
                 self.controller_thread.terminate()
