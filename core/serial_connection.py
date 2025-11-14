@@ -6,7 +6,7 @@ Esta clase es 100% no bloqueante (asíncrona).
 Versión 2.1: Corregido AttributeError 'isBusy'.
 """
 
-from PySide6.QtCore import QObject, Signal, Slot, QIODevice, QTextStream
+from PySide6.QtCore import QObject, Signal, Slot, QIODevice, QTextStream, QStringConverter
 from PySide6.QtSerialPort import QSerialPort, QSerialPortInfo
 
 class SerialConnection(QObject):
@@ -76,7 +76,7 @@ class SerialConnection(QObject):
         
         if self.serial.open(QIODevice.ReadWrite):
             self.text_stream = QTextStream(self.serial)
-            self.text_stream.setEncoding(QTextStream.Encoding.Utf8)
+            self.text_stream.setEncoding(QStringConverter.Encoding.Utf8)
 
             self.log_message.emit(f"Conectado a {port_name}")
             self.connection_changed.emit(True)
