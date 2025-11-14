@@ -1,21 +1,13 @@
 """
 core/machine_controller.py
-Controlador de la máquina para FluidNC (versión robusta).
-
-Gestiona una máquina de estados para la conexión, detecta caídas 
-y monitorea el estado de FluidNC (Idle, Run, Alarm).
+El 'Cerebro'. Entiende la lógica de FluidNC (JSON, estados).
+No sabe NADA sobre puertos seriales, solo recibe y envía texto.
 """
 
-import serial
-import serial.tools.list_ports
 import json
-import threading
-import time
 from enum import Enum
+from PySide6.QtCore import QObject, Signal, Slot
 
-from PySide6.QtCore import QObject, Signal, Slot, QThread
-
-# 1. Definimos los estados de nuestra conexión
 class ConnectionState(Enum):
     DISCONNECTED = 0
     CONNECTING = 1
@@ -23,103 +15,36 @@ class ConnectionState(Enum):
 
 class MachineController(QObject):
     """
-    Controla la conexión y comunicación con la máquina FluidNC.
-    Hereda de QObject para usar el sistema de Señales y Slots de Qt.
+    Maneja el estado de la máquina FluidNC.
     """
     
-    # --- Señales (Signals) ---
-    connection_changed = Signal(bool)     # True si CONECTADO, False si DESCONECTADO
-    port_list_updated = Signal(list)      # Lista de puertos COM
-    status_changed = Signal(str)          # Estado de FluidNC (Idle, Run, Alarm)
-    position_updated = Signal(float, float, float) # Posición MPos
-    log_message = Signal(str)             # Mensajes para el log de la GUI
-    machine_ready = Signal(bool)          # True si state == "Idle", False en otro caso
+    # --- Señales (Salida) ---
+    status_changed = Signal(str)
+    position_updated = Signal(float, float, float)
+    log_message = Signal(str)
+    machine_ready = Signal(bool)
+    
+    # ¡Nueva señal! Le "ordena" al Cartero que envíe un comando.
+    command_to_send = Signal(str)
 
     def __init__(self):
         super().__init__()
-        
-        # 2. Variables de estado
-        self.serial_connection = None
+        self.machine_state = "Desconectado"
         self.connection_state = ConnectionState.DISCONNECTED
-        self.machine_state = "Desconectado"     # Almacena el último estado conocido
-        self.run_listener = True                # Flag para mantener vivo el bucle
-        self.serial_lock = threading.Lock()
-        
-        # 3. Configuración del Heartbeat
-        self.HEARTBEAT_TIMEOUT = 5.0 # Segundos sin un JSON válido = Conexión perdida
-        self.last_message_time = 0
+        print("MachineController (Cerebro) inicializado.")
 
-        print("MachineController (Robusto) inicializado.")
-
-    # --- Slots (para ser llamados desde la GUI) ---
-
-    @Slot()
-    def find_ports(self):
-        print("--- DEBUG: Ejecutando find_ports()... ---")
-        try:
-            ports = serial.tools.list_ports.comports()
-            port_list = [port.device for port in ports]
-            print(f"--- DEBUG: Puertos encontrados: {port_list} ---")
-            self.port_list_updated.emit(port_list)
-        except Exception as e:
-            print(f"--- DEBUG: ERROR en find_ports(): {e} ---")
-            self.log_message.emit(f"Error al buscar puertos: {e}")
-
-    @Slot(str, int)
-    def connect_serial(self, port_name, baud_rate=115200):
-        if self.connection_state != ConnectionState.DISCONNECTED:
-            self.log_message.emit("Ya está conectado o conectando.")
-            return
-
-        self.connection_state = ConnectionState.CONNECTING
-        self.log_message.emit(f"Conectando a {port_name}...")
-
-        try:
-            self.serial_connection = serial.Serial(
-                port_name, baudrate=baud_rate, timeout=1.0
-            )
-            # Damos tiempo a que se estabilice y reiniciamos FluidNC
-            QThread.msleep(100) # Espera corta
-            self.serial_connection.write(b'\x18\n') # Ctrl+X para reiniciar
-            QThread.msleep(100)
-            
-            self.connection_state = ConnectionState.CONNECTED
-            self.last_message_time = time.time() # Iniciar el contador del heartbeat
-            
-            self.connection_changed.emit(True)
-            self.log_message.emit(f"Conectado a {port_name}")
-            
-        except serial.SerialException as e:
-            self.connection_state = ConnectionState.DISCONNECTED
-            self.connection_changed.emit(False)
-            self.log_message.emit(f"Error de conexión: {e}")
-
-    @Slot()
-    def disconnect_serial(self):
-        """
-        Inicia el proceso de desconexión. El bucle se encargará de cerrar.
-        """
-        if self.connection_state != ConnectionState.DISCONNECTED:
-            self.log_message.emit("Desconectando...")
-            self.connection_state = ConnectionState.DISCONNECTED
+    # --- Slots Públicos (Llamados desde la GUI) ---
 
     @Slot(str)
-    def send_command(self, command):
+    def send_command(self, command: str):
         """
-        Envía un comando G-code.
-        La GUI debería deshabilitar los botones si machine_ready es False.
+        Slot llamado por los botones (ej. Jog).
+        Simplemente re-emite el comando para el Cartero.
         """
-        if self.connection_state != ConnectionState.CONNECTED:
+        if self.connection_state == ConnectionState.CONNECTED:
+            self.command_to_send.emit(command)
+        else:
             self.log_message.emit("No conectado. Comando no enviado.")
-            return
-
-        with self.serial_lock:
-            try:
-                self.serial_connection.write((command + '\n').encode())
-            except serial.SerialException as e:
-                self.log_message.emit(f"Error al enviar: {e}")
-                # El puerto murió. Declaramos la conexión como perdida.
-                self.connection_state = ConnectionState.DISCONNECTED
 
     @Slot()
     def home(self):
@@ -129,80 +54,50 @@ class MachineController(QObject):
     def unlock(self):
         self.send_command("$X")
 
-    @Slot()
-    def run_listener_loop(self):
+    # --- Slots Internos (Conectados al 'Cartero') ---
+
+    @Slot(str)
+    def parse_line(self, line: str):
         """
-        El corazón del controlador. Escucha permanentemente el puerto serial.
-        Este slot DEBE ser conectado a la señal 'started' del QThread.
+        ¡El corazón del cerebro! Recibe una línea del Cartero (SerialConnection)
+        y la parsea.
         """
-        while self.run_listener:
+        if not line.startswith('{') or not line.endswith('}'):
+            # Ignorar 'ok' o mensajes que no sean JSON
+            return
+
+        try:
+            status_json = json.loads(line)
             
-            # --- Gestión de estado de conexión ---
-            if self.connection_state != ConnectionState.CONNECTED:
-                # Si estamos desconectados, cerramos el puerto (si existe)
-                if self.serial_connection:
-                    with self.serial_lock:
-                        self.serial_connection.close()
-                    self.serial_connection = None
-                    self.connection_changed.emit(False)
-                    self._update_machine_state("Desconectado")
+            if "State" in status_json and "name" in status_json["State"]:
+                self._update_machine_state(status_json["State"]["name"])
+            
+            if "MPos" in status_json:
+                pos = status_json["MPos"]
+                if len(pos) >= 3:
+                    self.position_updated.emit(pos[0], pos[1], pos[2])
                     
-                # Esperamos pasivamente hasta que se llame a connect_serial()
-                QThread.msleep(250)
-                continue
+        except json.JSONDecodeError:
+            self.log_message.emit(f"JSON corrupto: {line}")
+        except Exception as e:
+            self.log_message.emit(f"Error al parsear: {e}")
 
-            # --- Lógica de Heartbeat ---
-            if time.time() - self.last_message_time > self.HEARTBEAT_TIMEOUT:
-                self.log_message.emit("Error: Timeout de Heartbeat. Conexión perdida.")
-                self.connection_state = ConnectionState.DISCONNECTED
-                continue # El bucle volverá al inicio y gestionará la desconexión
+    @Slot(bool)
+    def on_connection_changed(self, is_connected: bool):
+        """
+        Actualiza el estado interno cuando el Cartero le informa.
+        """
+        if is_connected:
+            self.connection_state = ConnectionState.CONNECTED
+        else:
+            self.connection_state = ConnectionState.DISCONNECTED
+            self._update_machine_state("Desconectado")
 
-            # --- Lógica de Lectura ---
-            try:
-                with self.serial_lock:
-                    # 'readline()' bloqueará MÁXIMO 1 segundo (el timeout)
-                    response_line = self.serial_connection.readline().decode('utf-8').strip()
-
-                if not response_line:
-                    # Timeout de readline(). No es un error, solo estamos esperando.
-                    continue
-
-                if not response_line.startswith('{') or not response_line.endswith('}'):
-                    # Ignorar 'ok' o mensajes de bienvenida
-                    continue
-                
-                # ¡Recibimos datos! Reiniciamos el contador del heartbeat
-                self.last_message_time = time.time()
-                
-                # Parsear el JSON
-                status_json = json.loads(response_line)
-                
-                if "State" in status_json and "name" in status_json["State"]:
-                    self._update_machine_state(status_json["State"]["name"])
-                
-                if "MPos" in status_json:
-                    pos = status_json["MPos"]
-                    if len(pos) >= 3:
-                        self.position_updated.emit(pos[0], pos[1], pos[2])
-            
-            except (json.JSONDecodeError, UnicodeDecodeError):
-                self.log_message.emit("Recibido JSON corrupto. Ignorando.")
-                pass
-            except serial.SerialException as e:
-                self.log_message.emit(f"Error de puerto: {e}. Desconectando.")
-                self.connection_state = ConnectionState.DISCONNECTED
-            except Exception as e:
-                self.log_message.emit(f"Error inesperado en listener: {e}")
-                self.connection_state = ConnectionState.DISCONNECTED
-
-        # Fin del bucle (run_listener = False)
-        if self.serial_connection:
-            self.serial_connection.close()
-        print("Hilo listener detenido limpiamente.")
-
+    # --- Lógica Interna ---
+    
     def _update_machine_state(self, new_state: str):
         """
-        Función interna para centralizar la lógica de cambio de estado.
+        Centraliza la lógica de cambio de estado.
         """
         if self.machine_state == new_state:
             return # Sin cambios
@@ -210,15 +105,7 @@ class MachineController(QObject):
         self.machine_state = new_state
         self.status_changed.emit(new_state)
         
-        # 4. Emitir la señal de "listo"
         if new_state == "Idle":
             self.machine_ready.emit(True)
         else:
             self.machine_ready.emit(False)
-
-    def stop_listener(self):
-        """
-        Llamado por la MainWindow al cerrar para detener el bucle.
-        """
-        self.run_listener = False
-        self.disconnect_serial()

@@ -2,6 +2,7 @@
 gui/widgets/connect_panel.py
 Widget para manejar la selección de puerto, conexión, desconexión y
 comandos básicos como Home y Unlock.
+(Versión compatible con la arquitectura Cerebro/Cartero)
 """
 
 from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox, QLabel
@@ -25,7 +26,8 @@ class ConnectPanel(QGroupBox):
         # --- 1. Fila de Selección de Puerto ---
         self.port_label = QLabel("Puerto:")
         self.port_combo = QComboBox()
-        self.port_combo.setMinimumWidth(150)
+        # Darle más espacio para las descripciones largas
+        self.port_combo.setMinimumWidth(250) 
         self.port_combo.addItem("Buscando...")
         
         self.refresh_button = QPushButton("Refrescar")
@@ -69,12 +71,22 @@ class ConnectPanel(QGroupBox):
     @Slot(list)
     def update_port_list(self, ports: list):
         """
-        Slot: Se llama cuando el controlador emite 'port_list_updated'.
-        Actualiza el QComboBox con la lista de puertos encontrados.
+        Slot: Se llama cuando el 'Cartero' (SerialConnection) emite 'port_list_updated'.
+        Recibe la lista de diccionarios de puertos.
         """
         self.port_combo.clear()
+        
         if ports:
-            self.port_combo.addItems(ports)
+            for port_info in ports:
+                # Texto a mostrar: "USB-SERIAL CH340 (COM3)"
+                display_text = f"{port_info['description']} ({port_info['name']})"
+                
+                # Dato interno: "COM3"
+                port_name = port_info['name']
+                
+                # Añadimos ambos al ComboBox
+                self.port_combo.addItem(display_text, port_name)
+                
             self.connect_button.setEnabled(True)
         else:
             self.port_combo.addItem("No se encontraron puertos")
@@ -83,7 +95,7 @@ class ConnectPanel(QGroupBox):
     @Slot(bool)
     def update_connection_status(self, is_connected: bool):
         """
-        Slot: Se llama cuando el controlador emite 'connection_changed'.
+        Slot: Se llama cuando el 'Cartero' (SerialConnection) emite 'connection_changed'.
         Habilita/deshabilita los botones según el estado de la conexión.
         """
         # Botones que deben estar habilitados SÓLO si NO estamos conectados
@@ -110,11 +122,10 @@ class ConnectPanel(QGroupBox):
 
     def get_selected_port(self) -> str:
         """
-        Devuelve el texto del puerto COM actualmente seleccionado en el ComboBox.
+        Devuelve el dato interno (ej: "COM3") del puerto seleccionado.
         """
-        # Asegurarse de que no devolvemos "No se encontraron puertos"
         if self.port_combo.count() > 0:
-            current_text = self.port_combo.currentText()
-            if "COM" in current_text or "/dev/" in current_text: # Válido para Win/Linux
-                return current_text
+            # currentData() obtiene el segundo argumento (el dato interno) 
+            # que pasamos a addItem()
+            return self.port_combo.currentData()
         return None
