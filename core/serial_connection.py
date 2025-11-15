@@ -6,7 +6,7 @@ Esta clase es 100% no bloqueante (asíncrona).
 Versión 3.0: Lógica de configuración eliminada.
 """
 
-from PySide6.QtCore import QObject, Signal, Slot, QIODevice, QTextStream
+from PySide6.QtCore import QObject, Signal, Slot, QIODevice, QTextStream, QStringConverter
 from PySide6.QtSerialPort import QSerialPort, QSerialPortInfo
 
 class SerialConnection(QObject):
@@ -65,7 +65,7 @@ class SerialConnection(QObject):
         
         if self.serial.open(QIODevice.ReadWrite):
             self.text_stream = QTextStream(self.serial)
-            self.text_stream.setEncoding(QTextStream.Encoding.Utf8)
+            self.text_stream.setEncoding(QStringConverter.Encoding.Utf8)
 
             self.log_message.emit(f"Puerto {port_name} abierto. Esperando al 'Cerebro' para configurar.")
             self.connection_changed.emit(True)
