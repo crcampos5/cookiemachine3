@@ -1,12 +1,13 @@
 """
 core/machine_controller.py
 El 'Cerebro'. Entiende la lógica de FluidNC (JSON, estados).
-(Versión Corregida: Añadido initialize_thread)
+Versión: Añade configuración automática al conectar.
 """
 
 import json
+import time # Importamos time por si necesitamos retardos (opcional)
 from enum import Enum
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import QObject, Signal, Slot, QTimer
 
 class ConnectionState(Enum):
     DISCONNECTED = 0
@@ -30,12 +31,9 @@ class MachineController(QObject):
         self.connection_state = ConnectionState.DISCONNECTED
         print("MachineController (Cerebro) inicializado.")
 
-    # --- ¡ESTE ES EL SLOT QUE FALTABA! ---
     @Slot()
     def initialize_thread(self):
-        """
-        Slot llamado una vez por 'started' del QThread.
-        """
+        """ Slot llamado una vez por 'started' del QThread. """
         print("Cerebro (Controller) inicializado en su hilo.")
 
     @Slot(str)
@@ -59,7 +57,11 @@ class MachineController(QObject):
         """
         Recibe una línea del Cartero (SerialConnection) y la parsea.
         """
-        if not line.startswith('{') or not line.endswith('}'):
+        # A veces FluidNC envía mensajes de texto plano al inicio o "ok"
+        if not line.startswith('{'):
+            # Podríamos loguear mensajes de inicio si son importantes
+            if "FluidNC" in line or "Grbl" in line:
+                self.log_message.emit(f"Firmware: {line}")
             return 
 
         try:
@@ -72,16 +74,39 @@ class MachineController(QObject):
                 pos = status_json["MPos"]
                 if len(pos) >= 3:
                     self.position_updated.emit(pos[0], pos[1], pos[2])
-                    
+            
+            # Detectar mensajes de error o alarma en el JSON
+            if "Msg" in status_json:
+                self.log_message.emit(f"Mensaje máquina: {status_json['Msg']}")
+
         except json.JSONDecodeError:
-            self.log_message.emit(f"JSON corrupto: {line}")
+            # Ignoramos líneas que parecen JSON pero están corruptas
+            pass
         except Exception as e:
             self.log_message.emit(f"Error al parsear: {e}")
 
     @Slot(bool)
     def on_connection_changed(self, is_connected: bool):
+        """ 
+        Actualiza el estado interno cuando el Cartero le informa.
+        Aquí realizamos la inicialización de FluidNC.
+        """
         if is_connected:
             self.connection_state = ConnectionState.CONNECTED
+            self.log_message.emit("Conexión física establecida. Configurando FluidNC...")
+            
+            # --- SECUENCIA DE INICIALIZACIÓN ---
+            
+            # 1. Forzar reporte automático cada 200ms
+            # Esto asegura que recibamos actualizaciones sin pedir '?' constantemente
+            self.command_to_send.emit("$Report/Interval=200")
+            
+            # 2. Pedir estado inmediato (para no esperar los primeros 200ms)
+            self.command_to_send.emit("?")
+            
+            # 3. (Opcional) Pedir configuración actual para confirmar
+            # self.command_to_send.emit("$S") 
+            
         else:
             self.connection_state = ConnectionState.DISCONNECTED
             self._update_machine_state("Desconectado")
