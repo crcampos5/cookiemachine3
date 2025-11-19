@@ -136,6 +136,18 @@ class MachineController(QObject):
         self.log_message.emit("Enviando RESET (Ctrl+X)...")
         # \x18 es el carácter ASCII para Ctrl+X
         self.send_command("\x18")
+    
+    @Slot()
+    def hold(self):
+        """ Envía '!' para pausar el movimiento (Feed Hold). """
+        self.log_message.emit("Enviando PAUSA (!)...")
+        self.send_command("!")
+
+    @Slot()
+    def resume(self):
+        """ Envía '~' para reanudar el movimiento (Cycle Start). """
+        self.log_message.emit("Enviando REANUDAR (~)...")
+        self.send_command("~")
 
     @Slot(bool)
     def on_connection_changed(self, is_connected: bool):

@@ -40,10 +40,10 @@ class MoveControls(QGroupBox):
         
         self.feed_spinbox = QSpinBox()
         self.feed_spinbox.setSuffix(" F")
-        self.feed_spinbox.setValue(100)
+        self.feed_spinbox.setValue(500)
         self.feed_spinbox.setSingleStep(10)
         self.feed_spinbox.setMinimum(0)
-        self.feed_spinbox.setMaximum(500)
+        self.feed_spinbox.setMaximum(1000)
         
         settings_layout.addWidget(QLabel("Distancia:"))
         settings_layout.addWidget(self.step_spinbox, 1) # stretch 1

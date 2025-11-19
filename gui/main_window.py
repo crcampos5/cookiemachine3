@@ -14,6 +14,7 @@ from gui.widgets.connect_panel import ConnectPanel
 from gui.widgets.info_panel import InfoPanel
 from gui.widgets.move_controls import MoveControls
 from gui.widgets.camera_widget import CameraWidget
+from gui.widgets.action_panel import ActionPanel
 
 
 class MainWindow(QMainWindow):
@@ -66,6 +67,8 @@ class MainWindow(QMainWindow):
         right_panel_layout.addWidget(self.info_panel)
         self.move_controls = MoveControls()
         right_panel_layout.addWidget(self.move_controls)
+        self.action_panel = ActionPanel()
+        right_panel_layout.addWidget(self.action_panel)
         
         right_panel_layout.addStretch(1)
         main_layout.addLayout(left_panel_layout, stretch=3)
@@ -118,6 +121,15 @@ class MainWindow(QMainWindow):
         self.connection.log_message.connect(self.info_panel.add_log)
         self.camera_widget.log_message.connect(self.info_panel.add_log)
         self.laser_widget.log_message.connect(self.info_panel.add_log)
+
+        # --- Conexiones del ActionPanel (NUEVO) ---
+        # 1. Conectar estado de conexión para habilitar/deshabilitar botones
+        self.connection.connection_changed.connect(self.action_panel.set_enabled)
+        
+        # 2. Conectar botones a los slots del controlador
+        self.action_panel.estop_button.clicked.connect(self.controller.reset) # E-Stop es Reset
+        self.action_panel.pause_button.clicked.connect(self.controller.hold)
+        self.action_panel.resume_button.clicked.connect(self.controller.resume)
 
     @Slot()
     def emit_connect_signal(self):

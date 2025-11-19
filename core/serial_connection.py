@@ -125,6 +125,7 @@ class SerialConnection(QObject):
                 # .trimmed() elimina espacios y \r extra
                 line_str = line_data.data().decode('utf-8').strip()
                 if line_str: # Si no está vacía, emitirla
+                    #self.log_message.emit(line_str)
                     self.line_received.emit(line_str)
             except UnicodeDecodeError:
                 # Esto puede pasar si llega basura al inicio de la conexión
