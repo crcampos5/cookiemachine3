@@ -81,6 +81,7 @@ class MainWindow(QMainWindow):
         # --- A. GUI -> Cerebro (Controller) ---
         self.connect_panel.home_button.clicked.connect(self.controller.home)
         self.connect_panel.unlock_button.clicked.connect(self.controller.unlock)
+        self.connect_panel.reset_button.clicked.connect(self.controller.reset)
         self.move_controls.jog_command.connect(self.controller.send_command)
         
         # --- B. GUI -> Cartero (Connection) ---

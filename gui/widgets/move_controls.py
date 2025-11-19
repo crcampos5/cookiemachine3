@@ -40,10 +40,10 @@ class MoveControls(QGroupBox):
         
         self.feed_spinbox = QSpinBox()
         self.feed_spinbox.setSuffix(" F")
-        self.feed_spinbox.setValue(1000)
-        self.feed_spinbox.setSingleStep(100)
-        self.feed_spinbox.setMinimum(100)
-        self.feed_spinbox.setMaximum(6000)
+        self.feed_spinbox.setValue(100)
+        self.feed_spinbox.setSingleStep(10)
+        self.feed_spinbox.setMinimum(0)
+        self.feed_spinbox.setMaximum(500)
         
         settings_layout.addWidget(QLabel("Distancia:"))
         settings_layout.addWidget(self.step_spinbox, 1) # stretch 1
@@ -104,7 +104,7 @@ class MoveControls(QGroupBox):
             
         # G91 = Movimiento Relativo
         # G0 = Movimiento Rápido
-        gcode_command = f"G91 G0 {axis}{step} F{feed}"
+        gcode_command = f"G91 G1 {axis}{step} F{feed}"
         
         # Emitir la señal para que MainWindow la capture
         self.jog_command.emit(gcode_command)

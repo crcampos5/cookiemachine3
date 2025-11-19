@@ -1,8 +1,8 @@
 """
 gui/widgets/connect_panel.py
 Widget para manejar la selección de puerto, conexión, desconexión y
-comandos básicos como Home y Unlock.
-(Versión compatible con la arquitectura Cerebro/Cartero)
+comandos básicos como Home, Unlock y Reset.
+(Versión Final: Incluye botón de Reset para FluidNC)
 """
 
 from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox, QLabel
@@ -26,7 +26,7 @@ class ConnectPanel(QGroupBox):
         # --- 1. Fila de Selección de Puerto ---
         self.port_label = QLabel("Puerto:")
         self.port_combo = QComboBox()
-        # Darle más espacio para las descripciones largas
+        # Darle más espacio para las descripciones largas (ej: USB Serial CH340...)
         self.port_combo.setMinimumWidth(250) 
         self.port_combo.addItem("Buscando...")
         
@@ -43,17 +43,23 @@ class ConnectPanel(QGroupBox):
         action_layout.addWidget(self.connect_button)
         action_layout.addWidget(self.disconnect_button)
 
-        # --- 3. Fila de Comandos ---
+        # --- 3. Fila de Comandos (Home, Unlock, Reset) ---
         self.home_button = QPushButton("Home ($H)")
         self.unlock_button = QPushButton("Desbloquear ($X)")
         
+        # ¡NUEVO! Botón de Reset
+        self.reset_button = QPushButton("Reset (Ctrl+X)")
+        # Estilo rojo claro para indicar precaución
+        self.reset_button.setStyleSheet("background-color: #FFEBEE; color: #D32F2F;") 
+        
         control_layout.addWidget(self.home_button)
         control_layout.addWidget(self.unlock_button)
+        control_layout.addWidget(self.reset_button)
         
         # --- 4. Etiqueta de Estado ---
         self.status_label = QLabel("Estado: DESCONECTADO")
         
-        # --- Ensamblaje ---
+        # --- Ensamblaje Final ---
         main_layout.addLayout(port_layout)
         main_layout.addLayout(action_layout)
         main_layout.addLayout(control_layout)
@@ -98,15 +104,16 @@ class ConnectPanel(QGroupBox):
         Slot: Se llama cuando el 'Cartero' (SerialConnection) emite 'connection_changed'.
         Habilita/deshabilita los botones según el estado de la conexión.
         """
-        # Botones que deben estar habilitados SÓLO si NO estamos conectados
+        # Botones habilitados SÓLO si NO estamos conectados
         self.connect_button.setEnabled(not is_connected)
         self.refresh_button.setEnabled(not is_connected)
         self.port_combo.setEnabled(not is_connected)
         
-        # Botones que deben estar habilitados SÓLO si SÍ estamos conectados
+        # Botones habilitados SÓLO si SÍ estamos conectados
         self.disconnect_button.setEnabled(is_connected)
         self.home_button.setEnabled(is_connected)
         self.unlock_button.setEnabled(is_connected)
+        self.reset_button.setEnabled(is_connected) # Habilitar reset al conectar
         
         # Actualizar la etiqueta de estado visualmente
         if is_connected:
@@ -125,7 +132,6 @@ class ConnectPanel(QGroupBox):
         Devuelve el dato interno (ej: "COM3") del puerto seleccionado.
         """
         if self.port_combo.count() > 0:
-            # currentData() obtiene el segundo argumento (el dato interno) 
-            # que pasamos a addItem()
+            # currentData() obtiene el segundo argumento que pasamos a addItem()
             return self.port_combo.currentData()
         return None

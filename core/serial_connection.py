@@ -93,6 +93,7 @@ class SerialConnection(QObject):
         """ Envía una línea de texto al puerto. """
         if self.serial.isOpen():
             # Convertimos el string a bytes (utf-8) y añadimos nueva línea
+            self.log_message.emit(line)
             self.serial.write((line + '\n').encode('utf-8'))
         else:
             self.log_message.emit("No conectado. No se envió comando.")
