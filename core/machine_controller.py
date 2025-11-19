@@ -155,8 +155,10 @@ class MachineController(QObject):
             self.connection_state = ConnectionState.CONNECTED
             self.log_message.emit("Conectado. Iniciando reportes...")
             # Forzar reporte de MPos ($10=1) y auto-reporte ($Report/Interval=200)
+            
             self.command_to_send.emit("$10=1")
-            self.command_to_send.emit("$Report/Interval=200")
+            self.command_to_send.emit("$Report/Interval=100")
+            self.command_to_send.emit("?")
         else:
             self.connection_state = ConnectionState.DISCONNECTED
             self._update_machine_state("Desconectado")
