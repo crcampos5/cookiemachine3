@@ -46,9 +46,20 @@ class SerialConnection(QObject):
                 port_info = {
                     'name': port.portName(),
                     'description': port.description(),
-                    'manufacturer': port.manufacturer()
+                    'manufacturer': port.manufacturer(),
+                    'serial_number': port.serialNumber(),# Ej: 12345678 (¡Muy útil!)
+                    'vid': port.vendorIdentifier(),      # ID Vendedor (Hex)
+                    'pid': port.productIdentifier()      # ID Producto (Hex)
                 }
+                # Crear una etiqueta única para mostrar
+                # Si tiene serial, lo usamos. Si no, descripción.
+                if port_info['serial_number']:
+                    port_info['display'] = f"{port.portName()}: {port.description()} (#{port.serialNumber()})"
+                else:
+                    port_info['display'] = f"{port.portName()}: {port.description()}"
+                
                 port_list.append(port_info)
+                print(f"--- DETECTADO: {port_info} ---") # Ver esto en consola es clave
             
             if not port_list:
                 self.log_message.emit("No se encontraron puertos COM.")

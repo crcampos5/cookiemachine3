@@ -1,0 +1,72 @@
+"""
+core/fluidnc_codes.py
+Diccionarios de traducción para códigos de Alarma y Error de FluidNC.
+Basado en: http://wiki.fluidnc.com/en/support/alarm_and_error_codes
+"""
+
+# Códigos de ALARMA (Estados críticos que detienen la máquina)
+FLUIDNC_ALARMS = {
+    '1': "Límite Duro (Hard Limit) activado. Posición perdida. Se recomienda re-homing.",
+    '2': "Límite Suave (Soft Limit) excedido. El objetivo excede el recorrido de la máquina.",
+    '3': "Abortado durante ciclo. Reset enviado en movimiento. Posición perdida.",
+    '4': "Fallo de Sonda (Probe). La sonda no está en el estado inicial esperado.",
+    '5': "Fallo de Sonda (Probe). La sonda no contactó la pieza en la distancia programada.",
+    '6': "Fallo de Homing. El ciclo de homing fue reseteado.",
+    '7': "Fallo de Homing. Puerta de seguridad abierta durante el ciclo.",
+    '8': "Fallo de Homing. El movimiento de 'pull-off' no logró liberar el interruptor.",
+    '9': "Fallo de Homing. No se encontró el interruptor de límite dentro de la distancia de búsqueda.",
+    '10': "Fallo de Homing. Homing no habilitado en la configuración ($22).",
+    '11': "Fallo de Homing. Switch ambiguo. FluidNC no puede determinar qué eje activó el límite.",
+    '12': "Parada Dura (Hard Stop).",
+    '13': "No Homed. La máquina requiere homing ($H) antes de operar.",
+}
+
+# Códigos de ERROR (Comandos inválidos o rechazados)
+FLUIDNC_ERRORS = {
+    '1': "Se esperaba una letra de comando G-code (ej: G, M, F).",
+    '2': "Formato numérico de G-code inválido.",
+    '3': "Comando de sistema ($) inválido.",
+    '4': "Valor negativo no permitido.",
+    '5': "Configuración deshabilitada.",
+    '6': "Pulso de paso demasiado corto.",
+    '7': "Fallo al leer configuraciones (EEPROM/Flash).",
+    '8': "El comando requiere que la máquina esté en estado IDLE.",
+    '9': "Bloqueo G-code. No se permite en estado de Alarma o Jog.",
+    '10': "Error de límite suave (Homing no habilitado).",
+    '11': "Línea demasiado larga (Máx caracteres excedido).",
+    '12': "Tasa de pasos máxima excedida.",
+    '13': "Verifique la puerta de seguridad.",
+    '14': "Longitud de línea de inicio/build excedida.",
+    '15': "Recorrido excedido. El comando Jog excede los límites.",
+    '16': "Comando Jog inválido.",
+    '17': "Configuración deshabilitada (Modo Láser requiere PWM).",
+    '20': "Comando G-code no soportado.",
+    '21': "Violación de grupo modal (múltiples comandos del mismo grupo).",
+    '22': "Velocidad de avance (Feed rate) no definida.",
+    '23': "Conflicto de comando de eje (ej: G0 X1 G1 X2).",
+    '24': "Objetivo inválido (G2/G3 arcos).",
+    '25': "Error de coordenadas de trabajo G59.x.",
+    '26': "G53 inválido. Solo permitido con G0 y G1.",
+    '27': "Valor real inválido (NaN o Infinito).",
+    '28': "Falta palabra de eje en el comando.",
+    '29': "G59.x WCS no soportado.",
+    '30': "G53 inválido con offset.",
+    '31': "Valor real inválido.",
+    '32': "Arco G2/G3 falta palabra de eje.",
+    '33': "Error de formato de arco (centro/radio inválido).",
+    '34': "Movimiento sin palabra de eje.",
+    '35': "G2/G3 no permitido sin planos XY/ZX/YZ.",
+    '36': "Valor no usado (parámetro extra).",
+    '37': "Error de offset de herramienta dinámico G43.1.",
+    '38': "Número de herramienta mayor que el máximo soportado.",
+    '60': "Fallo al montar tarjeta SD.",
+    '61': "Fallo al leer archivo SD.",
+    '62': "Error al abrir directorio SD.",
+    '63': "Directorio no encontrado en SD.",
+    '64': "Archivo vacío en SD.",
+    '70': "Bluetooth falló al iniciar.",
+    '71': "WiFi falló al iniciar.",
+    '80': "Número fuera de rango para la configuración.",
+    '81': "Valor inválido para la configuración.",
+    '90': "Fallo al enviar mensaje.",
+}

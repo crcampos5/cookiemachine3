@@ -85,7 +85,7 @@ class ConnectPanel(QGroupBox):
         if ports:
             for port_info in ports:
                 # Texto a mostrar: "USB-SERIAL CH340 (COM3)"
-                display_text = f"{port_info['description']} ({port_info['name']})"
+                display_text = f"{port_info['display']} ({port_info['name']})"
                 
                 # Dato interno: "COM3"
                 port_name = port_info['name']
