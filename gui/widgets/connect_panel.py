@@ -1,137 +1,148 @@
 """
 gui/widgets/connect_panel.py
-Widget para manejar la selección de puerto, conexión, desconexión y
-comandos básicos como Home, Unlock y Reset.
-(Versión Final: Incluye botón de Reset para FluidNC)
+Widget para manejar la conexión manual independiente de:
+1. MÁQUINA (FluidNC)
+2. LEDLASER (Arduino)
 """
 
-from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox, QLabel
-from PySide6.QtCore import Slot
+from PySide6.QtWidgets import (QGroupBox, QVBoxLayout, QHBoxLayout, 
+                               QPushButton, QComboBox, QLabel, QFrame)
+from PySide6.QtCore import Slot, Qt
 
 class ConnectPanel(QGroupBox):
-    """
-    Este widget (panel) contiene todos los controles relacionados
-    con la conexión y los comandos de estado de la máquina.
-    """
     
     def __init__(self, parent=None):
-        super().__init__("Control de Máquina", parent)
+        super().__init__("Conexiones", parent)
         
-        # --- Layouts ---
         main_layout = QVBoxLayout()
-        port_layout = QHBoxLayout()
-        action_layout = QHBoxLayout()
-        control_layout = QHBoxLayout()
+        main_layout.setSpacing(8)
         
-        # --- 1. Fila de Selección de Puerto ---
-        self.port_label = QLabel("Puerto:")
-        self.port_combo = QComboBox()
-        # Darle más espacio para las descripciones largas (ej: USB Serial CH340...)
-        self.port_combo.setMinimumWidth(250) 
-        self.port_combo.addItem("Buscando...")
+        # --- 1. Refrescar Global ---
+        self.refresh_button = QPushButton("🔄 Refrescar Puertos USB")
+        main_layout.addWidget(self.refresh_button)
         
-        self.refresh_button = QPushButton("Refrescar")
+        # =============================================
+        # SECCIÓN A: MÁQUINA (FluidNC)
+        # =============================================
+        machine_box = QGroupBox("MÁQUINA")
+        machine_box.setStyleSheet("QGroupBox { font-weight: bold; color: #1565C0; }")
+        m_layout = QVBoxLayout()
         
-        port_layout.addWidget(self.port_label)
-        port_layout.addWidget(self.port_combo, 1) # El '1' le da espacio extra
-        port_layout.addWidget(self.refresh_button)
+        self.machine_combo = QComboBox()
+        self.machine_combo.setPlaceholderText("Seleccione puerto...")
+        m_layout.addWidget(self.machine_combo)
         
-        # --- 2. Fila de Acciones de Conexión ---
-        self.connect_button = QPushButton("Conectar")
-        self.disconnect_button = QPushButton("Desconectar")
+        m_btn_layout = QHBoxLayout()
+        self.btn_connect_machine = QPushButton("Conectar")
+        self.btn_disconnect_machine = QPushButton("Desconectar")
+        self.btn_disconnect_machine.setEnabled(False)
+        m_btn_layout.addWidget(self.btn_connect_machine)
+        m_btn_layout.addWidget(self.btn_disconnect_machine)
+        m_layout.addLayout(m_btn_layout)
         
-        action_layout.addWidget(self.connect_button)
-        action_layout.addWidget(self.disconnect_button)
+        self.lbl_status_machine = QLabel("🔴 DESCONECTADO")
+        self.lbl_status_machine.setAlignment(Qt.AlignCenter)
+        self.lbl_status_machine.setStyleSheet("background-color: #FFCDD2; border-radius: 4px; padding: 2px;")
+        m_layout.addWidget(self.lbl_status_machine)
+        
+        # Comandos de Preparación (Home/Unlock)
+        cmd_layout = QHBoxLayout()
+        self.home_button = QPushButton("🏠 Home")
+        self.unlock_button = QPushButton("🔓 Unlock")
+        cmd_layout.addWidget(self.home_button)
+        cmd_layout.addWidget(self.unlock_button)
+        m_layout.addLayout(cmd_layout)
+        
+        machine_box.setLayout(m_layout)
+        main_layout.addWidget(machine_box)
 
-        # --- 3. Fila de Comandos (Home, Unlock, Reset) ---
-        self.home_button = QPushButton("Home ($H)")
-        self.unlock_button = QPushButton("Desbloquear ($X)")
+        # =============================================
+        # SECCIÓN B: LEDLASER (Arduino)
+        # =============================================
+        arduino_box = QGroupBox("LEDLASER")
+        arduino_box.setStyleSheet("QGroupBox { font-weight: bold; color: #2E7D32; }")
+        a_layout = QVBoxLayout()
         
-        # ¡NUEVO! Botón de Reset
-        self.reset_button = QPushButton("Reset (Ctrl+X)")
-        # Estilo rojo claro para indicar precaución
-        self.reset_button.setStyleSheet("background-color: #FFEBEE; color: #D32F2F;") 
+        self.arduino_combo = QComboBox()
+        a_layout.addWidget(self.arduino_combo)
         
-        control_layout.addWidget(self.home_button)
-        control_layout.addWidget(self.unlock_button)
-        control_layout.addWidget(self.reset_button)
+        a_btn_layout = QHBoxLayout()
+        self.btn_connect_arduino = QPushButton("Conectar")
+        self.btn_disconnect_arduino = QPushButton("Desconectar")
+        self.btn_disconnect_arduino.setEnabled(False)
+        a_btn_layout.addWidget(self.btn_connect_arduino)
+        a_btn_layout.addWidget(self.btn_disconnect_arduino)
+        a_layout.addLayout(a_btn_layout)
         
-        # --- 4. Etiqueta de Estado ---
-        self.status_label = QLabel("Estado: DESCONECTADO")
+        self.lbl_status_arduino = QLabel("🔴 DESCONECTADO")
+        self.lbl_status_arduino.setAlignment(Qt.AlignCenter)
+        self.lbl_status_arduino.setStyleSheet("background-color: #FFCDD2; border-radius: 4px; padding: 2px;")
+        a_layout.addWidget(self.lbl_status_arduino)
         
-        # --- Ensamblaje Final ---
-        main_layout.addLayout(port_layout)
-        main_layout.addLayout(action_layout)
-        main_layout.addLayout(control_layout)
-        main_layout.addWidget(self.status_label)
-        main_layout.addStretch(1) # Empuja todo hacia arriba
+        arduino_box.setLayout(a_layout)
+        main_layout.addWidget(arduino_box)
         
+        main_layout.addStretch()
         self.setLayout(main_layout)
-        
-        # --- Estado Inicial ---
-        # Deshabilitar botones hasta que se conecte
-        self.update_connection_status(False)
-
-    # --- Slots (para ser llamados desde MainWindow) ---
 
     @Slot(list)
     def update_port_list(self, ports: list):
-        """
-        Slot: Se llama cuando el 'Cartero' (SerialConnection) emite 'port_list_updated'.
-        Recibe la lista de diccionarios de puertos.
-        """
-        self.port_combo.clear()
+        current_machine = self.get_machine_port()
+        current_arduino = self.get_arduino_port()
         
-        if ports:
-            for port_info in ports:
-                # Texto a mostrar: "USB-SERIAL CH340 (COM3)"
-                display_text = f"{port_info['display']} ({port_info['name']})"
-                
-                # Dato interno: "COM3"
-                port_name = port_info['name']
-                
-                # Añadimos ambos al ComboBox
-                self.port_combo.addItem(display_text, port_name)
-                
-            self.connect_button.setEnabled(True)
-        else:
-            self.port_combo.addItem("No se encontraron puertos")
-            self.connect_button.setEnabled(False) # No se puede conectar si no hay puertos
+        self.machine_combo.clear()
+        self.arduino_combo.clear()
+        
+        if not ports:
+            self.machine_combo.addItem("Sin puertos")
+            self.arduino_combo.addItem("Sin puertos")
+            return
+
+        for port_info in ports:
+            display = f"{port_info.get('display', port_info['name'])}"
+            name = port_info['name']
+            self.machine_combo.addItem(display, name)
+            self.arduino_combo.addItem(display, name)
+            
+        if current_machine: 
+            idx = self.machine_combo.findData(current_machine)
+            if idx >= 0: self.machine_combo.setCurrentIndex(idx)
+        if current_arduino:
+            idx = self.arduino_combo.findData(current_arduino)
+            if idx >= 0: self.arduino_combo.setCurrentIndex(idx)
 
     @Slot(bool)
-    def update_connection_status(self, is_connected: bool):
-        """
-        Slot: Se llama cuando el 'Cartero' (SerialConnection) emite 'connection_changed'.
-        Habilita/deshabilita los botones según el estado de la conexión.
-        """
-        # Botones habilitados SÓLO si NO estamos conectados
-        self.connect_button.setEnabled(not is_connected)
-        self.refresh_button.setEnabled(not is_connected)
-        self.port_combo.setEnabled(not is_connected)
+    def set_machine_status(self, connected: bool):
+        self.btn_connect_machine.setEnabled(not connected)
+        self.btn_disconnect_machine.setEnabled(connected)
+        self.machine_combo.setEnabled(not connected)
         
-        # Botones habilitados SÓLO si SÍ estamos conectados
-        self.disconnect_button.setEnabled(is_connected)
-        self.home_button.setEnabled(is_connected)
-        self.unlock_button.setEnabled(is_connected)
-        self.reset_button.setEnabled(is_connected) # Habilitar reset al conectar
+        # Habilitar comandos básicos
+        self.home_button.setEnabled(connected)
+        self.unlock_button.setEnabled(connected)
         
-        # Actualizar la etiqueta de estado visualmente
-        if is_connected:
-            self.status_label.setText("Estado: CONECTADO")
-            # Estilo CSS para el color verde
-            self.status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+        if connected:
+            self.lbl_status_machine.setText("🟢 CONECTADO")
+            self.lbl_status_machine.setStyleSheet("background-color: #C8E6C9; color: #2E7D32; border-radius: 4px; padding: 2px; font-weight: bold;")
         else:
-            self.status_label.setText("Estado: DESCONECTADO")
-            # Estilo CSS para el color rojo
-            self.status_label.setStyleSheet("color: #F44336; font-weight: bold;")
+            self.lbl_status_machine.setText("🔴 DESCONECTADO")
+            self.lbl_status_machine.setStyleSheet("background-color: #FFCDD2; color: #C62828; border-radius: 4px; padding: 2px;")
 
-    # --- Métodos de Ayuda (para ser llamados desde MainWindow) ---
+    @Slot(bool)
+    def set_arduino_status(self, connected: bool):
+        self.btn_connect_arduino.setEnabled(not connected)
+        self.btn_disconnect_arduino.setEnabled(connected)
+        self.arduino_combo.setEnabled(not connected)
+        
+        if connected:
+            self.lbl_status_arduino.setText("🟢 CONECTADO")
+            self.lbl_status_arduino.setStyleSheet("background-color: #C8E6C9; color: #2E7D32; border-radius: 4px; padding: 2px; font-weight: bold;")
+        else:
+            self.lbl_status_arduino.setText("🔴 DESCONECTADO")
+            self.lbl_status_arduino.setStyleSheet("background-color: #FFCDD2; color: #C62828; border-radius: 4px; padding: 2px;")
 
-    def get_selected_port(self) -> str:
-        """
-        Devuelve el dato interno (ej: "COM3") del puerto seleccionado.
-        """
-        if self.port_combo.count() > 0:
-            # currentData() obtiene el segundo argumento que pasamos a addItem()
-            return self.port_combo.currentData()
-        return None
+    def get_machine_port(self):
+        return self.machine_combo.currentData()
+
+    def get_arduino_port(self):
+        return self.arduino_combo.currentData()

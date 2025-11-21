@@ -1,155 +1,261 @@
 """
 gui/main_window.py
-Define la ventana principal (QMainWindow) de la aplicación.
-Versión: Usa señales para comunicarse con los hilos (Thread-Safe).
+Versión Vertical (1360x768): Integra FluidNC + Sensores + Nueva GUI Modular.
+Conexión Ajustada: Resume inicia el trabajo.
 """
 
-from PySide6.QtCore import QThread, Slot, Signal # <--- ¡Importamos Signal!
+from PySide6.QtCore import QThread, Slot, Signal, QTimer
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QVBoxLayout
+from PySide6.QtSerialPort import QSerialPortInfo
 
+# --- Imports del Núcleo ---
 from core.machine_controller import MachineController
 from core.serial_connection import SerialConnection
+from core.job_controller import JobController # <--- JobController actualizado
+from core.sensor_head.lighting_controller import LightingController
+from core.sensor_head.camera_driver import CameraDriver
 
-from gui.widgets.connect_panel import ConnectPanel
+# --- Widgets ---
+from gui.widgets.top_bar import TopBar
+from gui.widgets.led_control_panel import LedControlPanel
+from gui.widgets.machine_control_panel import MachineControlPanel
 from gui.widgets.info_panel import InfoPanel
 from gui.widgets.move_controls import MoveControls
 from gui.widgets.camera_widget import CameraWidget
 from gui.widgets.action_panel import ActionPanel
+from gui.widgets.file_panel import FilePanel
 
 
 class MainWindow(QMainWindow):
 
-    # --- ¡NUEVA SEÑAL! ---
-    # Esta señal llevará la orden de conexión al hilo del Cartero de forma segura.
-    request_connect = Signal(str, int)
+    request_connect_fluidnc = Signal(str, int)
+    request_connect_arduino = Signal(str, int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         
-        self.setWindowTitle("Cookie Machine (FluidNC - PySide6)")
-        self.setGeometry(100, 100, 1600, 900)
+        # Configuración de pantalla vertical
+        self.setWindowTitle("Cookie Machine (Vertical Layout)")
+        self.setGeometry(0, 0, 768, 1360) # Ancho x Alto
 
         self.setup_threads()
         self.setup_ui_layout()
         self.connect_signals_and_slots()
         
-        self.controller_thread.start()
-        self.connection_thread.start()
-        print("MainWindow inicializada. Hilos iniciados.")
+        # Iniciar hilos
+        self.fluidnc_thread.start()
+        self.fluidnc_conn_thread.start()
+        self.arduino_conn_thread.start()
+        self.cam1_thread.start()
+        self.cam2_thread.start()
+        self.job_thread.start() # <--- Importante: Iniciar hilo de trabajo
+        
+        print("Sistema inicializado.")
+        QTimer.singleShot(500, self.perform_auto_connect)
 
     def setup_threads(self):
+        # 1. FluidNC
         self.controller = MachineController()
-        self.controller_thread = QThread(self)
-        self.controller_thread.setObjectName("ControllerThread")
-        self.controller.moveToThread(self.controller_thread)
+        self.fluidnc_thread = QThread()
+        self.controller.moveToThread(self.fluidnc_thread)
         
         self.connection = SerialConnection()
-        self.connection_thread = QThread(self)
-        self.connection_thread.setObjectName("ConnectionThread")
-        self.connection.moveToThread(self.connection_thread)
+        self.fluidnc_conn_thread = QThread()
+        self.connection.moveToThread(self.fluidnc_conn_thread)
+        
+        # 2. Sensor
+        self.lighting = LightingController()
+        self.arduino_conn = SerialConnection()
+        self.arduino_conn_thread = QThread()
+        self.arduino_conn.moveToThread(self.arduino_conn_thread)
+        
+        # 3. Cámaras
+        self.cam1_driver = CameraDriver(0)
+        self.cam1_thread = QThread()
+        self.cam1_driver.moveToThread(self.cam1_thread)
+        self.cam2_driver = CameraDriver(1)
+        self.cam2_thread = QThread()
+        self.cam2_driver.moveToThread(self.cam2_thread)
+
+        # 4. JobController
+        self.job = JobController()
+        self.job_thread = QThread()
+        self.job.moveToThread(self.job_thread)
 
     def setup_ui_layout(self):
-        main_layout = QHBoxLayout()
-        left_panel_layout = QVBoxLayout()
-        left_panel_layout.setContentsMargins(5, 5, 5, 5)
-        
-        self.camera_widget = CameraWidget(camera_index=0, title="Cámara Principal")
-        left_panel_layout.addWidget(self.camera_widget, stretch=1)
-        self.laser_widget = CameraWidget(camera_index=1, title="Cámara Láser")
-        left_panel_layout.addWidget(self.laser_widget, stretch=1)
-
-        right_panel_layout = QVBoxLayout()
-        right_panel_layout.setContentsMargins(5, 5, 5, 5)
-
-        self.connect_panel = ConnectPanel()
-        right_panel_layout.addWidget(self.connect_panel)
-        self.info_panel = InfoPanel()
-        right_panel_layout.addWidget(self.info_panel)
-        self.move_controls = MoveControls()
-        right_panel_layout.addWidget(self.move_controls)
-        self.action_panel = ActionPanel()
-        right_panel_layout.addWidget(self.action_panel)
-        
-        right_panel_layout.addStretch(1)
-        main_layout.addLayout(left_panel_layout, stretch=3)
-        main_layout.addLayout(right_panel_layout, stretch=1)
-        
         central_widget = QWidget()
-        central_widget.setLayout(main_layout)
         self.setCentralWidget(central_widget)
+        
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(0,0,0,0)
+        main_layout.setSpacing(5)
+        
+        self.top_bar = TopBar()
+        main_layout.addWidget(self.top_bar)
+        
+        body_layout = QHBoxLayout()
+        body_layout.setContentsMargins(5,0,5,5)
+        
+        # Columna Izquierda (Video)
+        video_layout = QVBoxLayout()
+        self.camera_widget = CameraWidget(0, "Cámara Principal")
+        self.laser_widget = CameraWidget(1, "Cámara Láser")
+        video_layout.addWidget(self.camera_widget)
+        video_layout.addWidget(self.laser_widget)
+        
+        # Columna Derecha (Controles)
+        sidebar_layout = QVBoxLayout()
+        
+        self.led_panel = LedControlPanel()
+        sidebar_layout.addWidget(self.led_panel)
+        
+        self.machine_panel = MachineControlPanel()
+        sidebar_layout.addWidget(self.machine_panel)
+        
+        self.file_panel = FilePanel()
+        sidebar_layout.addWidget(self.file_panel)
+        
+        self.info_panel = InfoPanel()
+        sidebar_layout.addWidget(self.info_panel)
+        
+        self.move_controls = MoveControls()
+        sidebar_layout.addWidget(self.move_controls)
+        
+        self.action_panel = ActionPanel()
+        sidebar_layout.addWidget(self.action_panel)
+        
+        sidebar_layout.addStretch() 
+        
+        body_layout.addLayout(video_layout, stretch=2) 
+        body_layout.addLayout(sidebar_layout, stretch=1)
+        
+        main_layout.addLayout(body_layout)
 
     def connect_signals_and_slots(self):
-        """ Conecta todos los componentes. """
-        
-        # --- A. GUI -> Cerebro (Controller) ---
-        self.connect_panel.home_button.clicked.connect(self.controller.home)
-        self.connect_panel.unlock_button.clicked.connect(self.controller.unlock)
-        self.connect_panel.reset_button.clicked.connect(self.controller.reset)
-        self.move_controls.jog_command.connect(self.controller.send_command)
-        
-        # --- B. GUI -> Cartero (Connection) ---
-        
-        # ¡CAMBIO IMPORTANTE AQUÍ!
-        # Conectamos nuestra señal SEGURA 'request_connect' al slot 'connect_to' del Cartero.
-        # Qt se encarga de pasar la llamada de un hilo a otro.
-        self.request_connect.connect(self.connection.connect_to)
-        
-        # El botón llama a un slot local que EMITE la señal
-        self.connect_panel.connect_button.clicked.connect(self.emit_connect_signal)
-        
-        self.connect_panel.disconnect_button.clicked.connect(self.connection.disconnect_from)
-        self.connect_panel.refresh_button.clicked.connect(self.connection.find_ports)
-        self.connection_thread.started.connect(self.connection.find_ports)
-        self.controller_thread.started.connect(self.controller.initialize_thread)
+        # --- TopBar ---
+        self.top_bar.refresh_button.clicked.connect(self.connection.find_ports)
+        self.connection.port_list_updated.connect(self.top_bar.update_port_list)
+        self.fluidnc_conn_thread.started.connect(self.connection.find_ports)
 
-        # --- C. Cerebro -> GUI ---
-        self.controller.status_changed.connect(self.info_panel.update_status)
-        self.controller.position_updated.connect(self.info_panel.update_position)
-        self.controller.machine_ready.connect(self.move_controls.set_controls_enabled)
-        
-        # --- D. Cartero -> GUI ---
-        self.connection.port_list_updated.connect(self.connect_panel.update_port_list)
-        self.connection.connection_changed.connect(self.connect_panel.update_connection_status)
+        self.request_connect_fluidnc.connect(self.connection.connect_to)
+        self.top_bar.btn_connect_machine.clicked.connect(self.emit_connect_fluidnc_signal)
+        self.top_bar.btn_disconnect_machine.clicked.connect(self.connection.disconnect_from)
+        self.connection.connection_changed.connect(self.top_bar.set_machine_status)
 
-        # --- E. Cerebro <-> Cartero ---
+        self.request_connect_arduino.connect(self.arduino_conn.connect_to)
+        self.top_bar.btn_connect_arduino.clicked.connect(self.emit_connect_arduino_signal)
+        self.top_bar.btn_disconnect_arduino.clicked.connect(self.arduino_conn.disconnect_from)
+        self.arduino_conn.connection_changed.connect(self.top_bar.set_arduino_status)
+
+        # --- LedPanel ---
+        self.led_panel.request_led_brightness.connect(self.lighting.set_brightness)
+        self.led_panel.request_led_off.connect(self.lighting.leds_off)
+        self.led_panel.request_laser_power.connect(self.lighting.set_laser_power)
+        self.led_panel.request_laser_off.connect(self.lighting.laser_off)
+
+        # --- MachinePanel ---
+        self.machine_panel.home_button.clicked.connect(self.controller.home)
+        self.machine_panel.unlock_button.clicked.connect(self.controller.unlock)
+        self.machine_panel.reset_button.clicked.connect(self.controller.reset)
+
+        # --- JOB INTEGRATION (CAMBIOS CLAVE) ---
+        # 1. Cargar archivo
+        self.file_panel.file_selected.connect(self.job.load_file)
+        
+        # 2. Botones ActionPanel -> JobController
+        self.action_panel.estop_button.clicked.connect(self.job.stop_job)
+        self.action_panel.pause_button.clicked.connect(self.job.pause_job)
+        # El botón Reanudar ahora llama a on_resume_request (que inicia o reanuda)
+        self.action_panel.resume_button.clicked.connect(self.job.on_resume_request)
+        
+        # 3. JobController -> Hardware
+        self.job.request_command.connect(self.connection.send_line)
+        self.job.request_lighting_on.connect(lambda: self.lighting.set_color_all(255, 255, 255))
+        self.job.request_lighting_off.connect(self.lighting.leds_off)
+        self.job.request_laser_on.connect(self.lighting.laser_on_full)
+        self.job.request_laser_off.connect(self.lighting.laser_off)
+        
+        # 4. Hardware -> JobController
+        self.cam1_driver.frame_captured.connect(self.job.update_main_frame)
+        self.cam2_driver.frame_captured.connect(self.job.update_laser_frame)
+        self.controller.status_changed.connect(self.job.update_machine_status)
+
+        # --- FluidNC Internals ---
+        self.fluidnc_thread.started.connect(self.controller.initialize_thread)
         self.connection.line_received.connect(self.controller.parse_line)
         self.controller.command_to_send.connect(self.connection.send_line)
         self.connection.connection_changed.connect(self.controller.on_connection_changed)
+        self.controller.status_changed.connect(self.info_panel.update_status)
+        self.controller.position_updated.connect(self.info_panel.update_position)
+        self.controller.machine_ready.connect(self.move_controls.set_controls_enabled)
+        self.connection.connection_changed.connect(self.action_panel.set_enabled)
 
-        # --- F. Logging ---
+        # --- Arduino Internals ---
+        self.lighting.command_to_send.connect(self.arduino_conn.send_line)
+        self.arduino_conn.connection_changed.connect(self.lighting.on_connection_changed)
+
+        # --- MoveControls ---
+        self.move_controls.jog_command.connect(self.controller.send_command)
+
+        # --- Cameras ---
+        self.cam1_driver.frame_captured.connect(self.camera_widget.set_image)
+        self.cam2_driver.frame_captured.connect(self.laser_widget.set_image)
+        QTimer.singleShot(2000, self.cam1_driver.start)
+        QTimer.singleShot(2000, self.cam2_driver.start)
+
+        # --- Logs ---
         self.controller.log_message.connect(self.info_panel.add_log)
         self.connection.log_message.connect(self.info_panel.add_log)
-        self.camera_widget.log_message.connect(self.info_panel.add_log)
-        self.laser_widget.log_message.connect(self.info_panel.add_log)
-
-        # --- Conexiones del ActionPanel (NUEVO) ---
-        # 1. Conectar estado de conexión para habilitar/deshabilitar botones
-        self.connection.connection_changed.connect(self.action_panel.set_enabled)
-        
-        # 2. Conectar botones a los slots del controlador
-        self.action_panel.estop_button.clicked.connect(self.controller.reset) # E-Stop es Reset
-        self.action_panel.pause_button.clicked.connect(self.controller.hold)
-        self.action_panel.resume_button.clicked.connect(self.controller.resume)
+        self.lighting.log_message.connect(self.info_panel.add_log)
+        self.arduino_conn.log_message.connect(self.info_panel.add_log)
+        self.job.log_message.connect(self.info_panel.add_log)
 
     @Slot()
-    def emit_connect_signal(self):
-        """
-        Recoge los datos de la GUI y emite la señal para el hilo.
-        NO llama a self.connection directamente.
-        """
-        port = self.connect_panel.get_selected_port()
-        if port:
-            # Emitir la señal. Qt la llevará al hilo correcto.
-            self.request_connect.emit(port, 115200)
-        else:
-            self.info_panel.add_log("Error: No se seleccionó ningún puerto COM.")
+    def emit_connect_fluidnc_signal(self):
+        port = self.top_bar.get_machine_port()
+        if port: self.request_connect_fluidnc.emit(port, 115200)
+        else: self.info_panel.add_log("⚠️ Seleccione puerto Máquina")
+
+    @Slot()
+    def emit_connect_arduino_signal(self):
+        port = self.top_bar.get_arduino_port()
+        if port: self.request_connect_arduino.emit(port, 115200)
+        else: self.info_panel.add_log("⚠️ Seleccione puerto LedLaser")
+
+    @Slot()
+    def perform_auto_connect(self):
+        ports = QSerialPortInfo.availablePorts()
+        self.info_panel.add_log("--- Auto-Conexión ---")
+        
+        FLUIDNC_IDS = ["CP210", "Silicon Labs", "Espressif"]
+        ARDUINO_IDS = ["CH340", "USB-SERIAL", "Arduino"]
+        
+        fluidnc_found = False
+        arduino_found = False
+
+        for port in ports:
+            info = f"{port.description()} {port.manufacturer()}".upper()
+            name = port.portName()
+            
+            if not fluidnc_found and any(x in info for x in FLUIDNC_IDS):
+                self.info_panel.add_log(f"✅ Máquina detectada en {name}")
+                self.request_connect_fluidnc.emit(name, 115200)
+                fluidnc_found = True
+                continue
+            
+            if not arduino_found and any(x in info for x in ARDUINO_IDS):
+                self.info_panel.add_log(f"✅ LedLaser detectado en {name}")
+                self.request_connect_arduino.emit(name, 115200)
+                arduino_found = True
 
     def closeEvent(self, event):
-        print("Cerrando aplicación...")
-        self.camera_widget.stop_feed()
-        self.laser_widget.stop_feed()
-        self.controller_thread.quit()
-        self.connection_thread.quit()
-        self.controller_thread.wait(2000)
-        self.connection_thread.wait(2000)
+        self.cam1_driver.stop()
+        self.cam2_driver.stop()
+        self.fluidnc_thread.quit()
+        self.fluidnc_conn_thread.quit()
+        self.arduino_conn_thread.quit()
+        self.cam1_thread.quit()
+        self.cam2_thread.quit()
+        self.job_thread.quit()
+        self.fluidnc_thread.wait(1000)
         event.accept()

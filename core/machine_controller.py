@@ -109,6 +109,7 @@ class MachineController(QObject):
         # --- 4. Mensajes informativos ---
         if line.startswith('[MSG:'):
             self.log_message.emit(f"ℹ️ {line}")
+            #self.send_command("?")
             return
         elif "FluidNC" in line or "Grbl" in line:
             self.log_message.emit(f"🔌 {line}")
