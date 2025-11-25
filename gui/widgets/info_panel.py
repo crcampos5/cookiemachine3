@@ -30,13 +30,22 @@ class InfoPanel(QGroupBox):
         self.update_status("Desconectado") # Poner el color inicial
         
         # --- 2. Layout de Posición (Formulario) ---
+        style_pos = ("font-weight: bold; color: #555; font-size: 12pt;")
         self.x_pos_label = QLabel("---")
+        self.x_pos_label.setStyleSheet(style_pos)
         self.y_pos_label = QLabel("---")
+        self.y_pos_label.setStyleSheet(style_pos)
         self.z_pos_label = QLabel("---")
-        
-        position_layout.addRow(QLabel("X:"), self.x_pos_label)
-        position_layout.addRow(QLabel("Y:"), self.y_pos_label)
-        position_layout.addRow(QLabel("Z:"), self.z_pos_label)
+        self.z_pos_label.setStyleSheet(style_pos)
+        x_label = QLabel("X:")
+        x_label.setStyleSheet(style_pos)
+        y_label = QLabel("Y:")
+        y_label.setStyleSheet(style_pos)
+        z_label = QLabel("Z:")
+        z_label.setStyleSheet(style_pos)
+        position_layout.addRow(x_label, self.x_pos_label)
+        position_layout.addRow(y_label, self.y_pos_label)
+        position_layout.addRow(z_label, self.z_pos_label)
         
         # --- 3. Registro de Mensajes ---
         self.log_text = QTextEdit()
@@ -46,7 +55,7 @@ class InfoPanel(QGroupBox):
         # --- Ensamblaje ---
         main_layout.addWidget(self.state_label)
         main_layout.addLayout(position_layout)
-        main_layout.addWidget(QLabel("Registro:"))
+        #main_layout.addWidget(QLabel("Registro:"))
         main_layout.addWidget(self.log_text, 1) # El '1' le da espacio extra
         
         self.setLayout(main_layout)

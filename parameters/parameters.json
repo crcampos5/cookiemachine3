@@ -1,0 +1,39 @@
+{
+    "machine_port": "COM10",
+    "ledlaser_port": "COM9",
+    "valor_pixel_to_mm": 4.23,
+    "laser_number": 0,
+    "camera_number": 1,
+    "resolution": [
+        640,
+        480
+    ],
+    "resolution_laser": [
+        1600,
+        1200
+    ],
+    "z_travel": -85.7,
+    "laser_cero": 123.2,
+    "off_set_nozzle": -47.71,
+    "nozzle_spacing": 3.0,
+    "activation_height": 2.0,
+    "modes": {
+        "Boquilla": [
+            0,
+            0
+        ],
+        "Camara": [
+            -17.401,
+            -196.294
+        ],
+        "Laser": [
+            -52.178,
+            -198.318
+        ]
+    },
+    "laser_intensity": 800,
+    "expositure": -8,
+    "laser_sensor": {
+        "type": "point"
+    }
+}

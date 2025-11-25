@@ -36,22 +36,14 @@ class ConnectPanel(QGroupBox):
         self.btn_connect_machine = QPushButton("Conectar")
         self.btn_disconnect_machine = QPushButton("Desconectar")
         self.btn_disconnect_machine.setEnabled(False)
-        m_btn_layout.addWidget(self.btn_connect_machine)
-        m_btn_layout.addWidget(self.btn_disconnect_machine)
-        m_layout.addLayout(m_btn_layout)
-        
         self.lbl_status_machine = QLabel("🔴 DESCONECTADO")
         self.lbl_status_machine.setAlignment(Qt.AlignCenter)
         self.lbl_status_machine.setStyleSheet("background-color: #FFCDD2; border-radius: 4px; padding: 2px;")
-        m_layout.addWidget(self.lbl_status_machine)
+        m_btn_layout.addWidget(self.btn_connect_machine)
+        m_btn_layout.addWidget(self.btn_disconnect_machine)
+        m_btn_layout.addWidget(self.lbl_status_machine)
         
-        # Comandos de Preparación (Home/Unlock)
-        cmd_layout = QHBoxLayout()
-        self.home_button = QPushButton("🏠 Home")
-        self.unlock_button = QPushButton("🔓 Unlock")
-        cmd_layout.addWidget(self.home_button)
-        cmd_layout.addWidget(self.unlock_button)
-        m_layout.addLayout(cmd_layout)
+        m_layout.addLayout(m_btn_layout)
         
         machine_box.setLayout(m_layout)
         main_layout.addWidget(machine_box)
@@ -70,14 +62,16 @@ class ConnectPanel(QGroupBox):
         self.btn_connect_arduino = QPushButton("Conectar")
         self.btn_disconnect_arduino = QPushButton("Desconectar")
         self.btn_disconnect_arduino.setEnabled(False)
-        a_btn_layout.addWidget(self.btn_connect_arduino)
-        a_btn_layout.addWidget(self.btn_disconnect_arduino)
-        a_layout.addLayout(a_btn_layout)
-        
         self.lbl_status_arduino = QLabel("🔴 DESCONECTADO")
         self.lbl_status_arduino.setAlignment(Qt.AlignCenter)
         self.lbl_status_arduino.setStyleSheet("background-color: #FFCDD2; border-radius: 4px; padding: 2px;")
-        a_layout.addWidget(self.lbl_status_arduino)
+        a_btn_layout.addWidget(self.btn_connect_arduino)
+        a_btn_layout.addWidget(self.btn_disconnect_arduino)
+        a_btn_layout.addWidget(self.lbl_status_arduino)
+        a_layout.addLayout(a_btn_layout)
+        
+        
+        #a_layout.addWidget(self.lbl_status_arduino)
         
         arduino_box.setLayout(a_layout)
         main_layout.addWidget(arduino_box)
@@ -117,9 +111,6 @@ class ConnectPanel(QGroupBox):
         self.btn_disconnect_machine.setEnabled(connected)
         self.machine_combo.setEnabled(not connected)
         
-        # Habilitar comandos básicos
-        self.home_button.setEnabled(connected)
-        self.unlock_button.setEnabled(connected)
         
         if connected:
             self.lbl_status_machine.setText("🟢 CONECTADO")

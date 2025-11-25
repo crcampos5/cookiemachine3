@@ -11,11 +11,12 @@ from PySide6.QtSerialPort import QSerialPortInfo
 # --- Imports del Núcleo ---
 from core.machine_controller import MachineController
 from core.serial_connection import SerialConnection
-from core.job_controller import JobController # <--- JobController actualizado
+from core.job_controller import JobController 
 from core.sensor_head.lighting_controller import LightingController
 from core.sensor_head.camera_driver import CameraDriver
 
 # --- Widgets ---
+from gui.widgets.connect_panel import ConnectPanel
 from gui.widgets.top_bar import TopBar
 from gui.widgets.led_control_panel import LedControlPanel
 from gui.widgets.machine_control_panel import MachineControlPanel
@@ -24,6 +25,10 @@ from gui.widgets.move_controls import MoveControls
 from gui.widgets.camera_widget import CameraWidget
 from gui.widgets.action_panel import ActionPanel
 from gui.widgets.file_panel import FilePanel
+from gui.widgets.injector_panel import InjectorPanel
+
+from settings.settings_manager import SettingsManager
+from gui.dialogs.settings_dialog import SettingsDialog
 
 
 class MainWindow(QMainWindow):
@@ -33,9 +38,11 @@ class MainWindow(QMainWindow):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        self.settings_manager = SettingsManager()
         
         # Configuración de pantalla vertical
-        self.setWindowTitle("Cookie Machine (Vertical Layout)")
+        self.setWindowTitle("Cookie Machine Control")
         self.setGeometry(0, 0, 768, 1360) # Ancho x Alto
 
         self.setup_threads()
@@ -50,7 +57,6 @@ class MainWindow(QMainWindow):
         self.cam2_thread.start()
         self.job_thread.start() # <--- Importante: Iniciar hilo de trabajo
         
-        print("Sistema inicializado.")
         QTimer.singleShot(500, self.perform_auto_connect)
 
     def setup_threads(self):
@@ -102,9 +108,15 @@ class MainWindow(QMainWindow):
         self.laser_widget = CameraWidget(1, "Cámara Láser")
         video_layout.addWidget(self.camera_widget)
         video_layout.addWidget(self.laser_widget)
+        # AÑADIR INYECTORES
+        self.injector_panel = InjectorPanel()
+        video_layout.addWidget(self.injector_panel, stretch=0)
         
         # Columna Derecha (Controles)
         sidebar_layout = QVBoxLayout()
+
+        self.connect_panel = ConnectPanel()
+        sidebar_layout.addWidget(self.connect_panel)
         
         self.led_panel = LedControlPanel()
         sidebar_layout.addWidget(self.led_panel)
@@ -133,19 +145,22 @@ class MainWindow(QMainWindow):
 
     def connect_signals_and_slots(self):
         # --- TopBar ---
-        self.top_bar.refresh_button.clicked.connect(self.connection.find_ports)
-        self.connection.port_list_updated.connect(self.top_bar.update_port_list)
+        self.top_bar.btn_params.clicked.connect(self.open_settings_dialog)
+
+        # --- Connect Panel ---
+        self.connect_panel.refresh_button.clicked.connect(self.connection.find_ports)
+        self.connection.port_list_updated.connect(self.connect_panel.update_port_list)
         self.fluidnc_conn_thread.started.connect(self.connection.find_ports)
 
         self.request_connect_fluidnc.connect(self.connection.connect_to)
-        self.top_bar.btn_connect_machine.clicked.connect(self.emit_connect_fluidnc_signal)
-        self.top_bar.btn_disconnect_machine.clicked.connect(self.connection.disconnect_from)
-        self.connection.connection_changed.connect(self.top_bar.set_machine_status)
+        self.connect_panel.btn_connect_machine.clicked.connect(self.emit_connect_fluidnc_signal)
+        self.connect_panel.btn_disconnect_machine.clicked.connect(self.connection.disconnect_from)
+        self.connection.connection_changed.connect(self.connect_panel.set_machine_status)
 
         self.request_connect_arduino.connect(self.arduino_conn.connect_to)
-        self.top_bar.btn_connect_arduino.clicked.connect(self.emit_connect_arduino_signal)
-        self.top_bar.btn_disconnect_arduino.clicked.connect(self.arduino_conn.disconnect_from)
-        self.arduino_conn.connection_changed.connect(self.top_bar.set_arduino_status)
+        self.connect_panel.btn_connect_arduino.clicked.connect(self.emit_connect_arduino_signal)
+        self.connect_panel.btn_disconnect_arduino.clicked.connect(self.arduino_conn.disconnect_from)
+        self.arduino_conn.connection_changed.connect(self.connect_panel.set_arduino_status)
 
         # --- LedPanel ---
         self.led_panel.request_led_brightness.connect(self.lighting.set_brightness)
@@ -211,17 +226,32 @@ class MainWindow(QMainWindow):
         self.arduino_conn.log_message.connect(self.info_panel.add_log)
         self.job.log_message.connect(self.info_panel.add_log)
 
+        # --- CONEXIONES INYECTORES ---
+        
+        # 1. Pistón y Presión -> Arduino (LightingController)
+        self.injector_panel.request_piston.connect(self.lighting.set_piston)
+        self.injector_panel.request_pressure.connect(self.lighting.set_pressure)
+        
+        # 2. Válvula -> Máquina (MachineController)
+        self.injector_panel.request_valve.connect(self.controller.set_valve)
+
     @Slot()
     def emit_connect_fluidnc_signal(self):
-        port = self.top_bar.get_machine_port()
+        port = self.connect_panel.get_machine_port()
         if port: self.request_connect_fluidnc.emit(port, 115200)
         else: self.info_panel.add_log("⚠️ Seleccione puerto Máquina")
 
     @Slot()
     def emit_connect_arduino_signal(self):
-        port = self.top_bar.get_arduino_port()
+        port = self.connect_panel.get_arduino_port()
         if port: self.request_connect_arduino.emit(port, 115200)
         else: self.info_panel.add_log("⚠️ Seleccione puerto LedLaser")
+    
+    @Slot()
+    def open_settings_dialog(self):
+        """ Abre la ventana de configuración modal. """
+        dialog = SettingsDialog(self.settings_manager, self)
+        dialog.exec() 
 
     @Slot()
     def perform_auto_connect(self):

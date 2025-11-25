@@ -173,3 +173,19 @@ class MachineController(QObject):
         else:
             self.connection_state = ConnectionState.DISCONNECTED
             self._update_machine_state("Desconectado")
+    
+    # --- CONTROL DE VÁLVULA (FluidNC) ---
+
+    @Slot(int, bool)
+    def set_valve(self, index: int, active: bool):
+        """
+        Activa la salida de glaseado.
+        Nota: FluidNC suele tener un solo canal de M8/M9 por husillo, 
+        pero si tienes salidas configuradas, usa sus códigos.
+        """
+        # Ejemplo: M8 (On) / M9 (Off)
+        # Si necesitas diferenciar inyectores, cambia los comandos aquí.
+        command = "M8" if active else "M9"
+        
+        self.log_message.emit(f"Máquina: Válvula {index} {'ABIERTA' if active else 'CERRADA'}")
+        self.send_command(command)

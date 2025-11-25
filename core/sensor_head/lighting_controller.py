@@ -113,6 +113,30 @@ class LightingController(QObject):
         self.leds_off()
         self.laser_off()
 
+    # --- CONTROL NEUMÁTICO (Arduino) ---
+
+    @Slot(int, bool)
+    def set_piston(self, index: int, active: bool):
+        """
+        Envía comando de pistón al Arduino.
+        Protocolo sugerido: PISTON,index,state (1=Abajo, 0=Arriba)
+        """
+        state = 1 if active else 0
+        cmd = f"PISTON,{index},{state}"
+        self._send(cmd)
+        self.log_message.emit(f"Arduino: Pistón {index} {'ABAJO' if active else 'ARRIBA'}")
+
+    @Slot(int, bool)
+    def set_pressure(self, index: int, active: bool):
+        """
+        Envía comando de presión de tanque al Arduino.
+        Protocolo sugerido: PRESS,index,state (1=ON, 0=OFF)
+        """
+        state = 1 if active else 0
+        cmd = f"PRESS,{index},{state}"
+        self._send(cmd)
+        self.log_message.emit(f"Arduino: Presión Tanque {index} {'ON' if active else 'OFF'}")
+
     # --- Helper Interno ---
 
     def _send(self, cmd):
