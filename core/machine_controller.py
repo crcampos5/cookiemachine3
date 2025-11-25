@@ -109,10 +109,11 @@ class MachineController(QObject):
         # --- 4. Mensajes informativos ---
         if line.startswith('[MSG:'):
             self.log_message.emit(f"ℹ️ {line}")
-            #self.send_command("?")
+            self.command_to_send.emit("?") 
             return
         elif "FluidNC" in line or "Grbl" in line:
             self.log_message.emit(f"🔌 {line}")
+            self.command_to_send.emit("$Report/Interval=100")
 
     def _emit_coordinates(self, coords_str):
         try:
@@ -165,9 +166,10 @@ class MachineController(QObject):
         if is_connected:
             self.connection_state = ConnectionState.CONNECTED
             self.log_message.emit("✅ Conexión establecida.")
-            self.command_to_send.emit("$10=1") # Forzar MPos
-            self.command_to_send.emit("$Report/Interval=200") # Auto-reporte
             self.command_to_send.emit("?") # Estado inicial
+            #self.command_to_send.emit("$10=1") # Forzar MPos
+            #self.command_to_send.emit("$Report/Interval=100") # Auto-reporte
+            
         else:
             self.connection_state = ConnectionState.DISCONNECTED
             self._update_machine_state("Desconectado")

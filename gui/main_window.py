@@ -149,6 +149,7 @@ class MainWindow(QMainWindow):
 
         # --- LedPanel ---
         self.led_panel.request_led_brightness.connect(self.lighting.set_brightness)
+        self.led_panel.request_led_on.connect(self.lighting.set_color_all)
         self.led_panel.request_led_off.connect(self.lighting.leds_off)
         self.led_panel.request_laser_power.connect(self.lighting.set_laser_power)
         self.led_panel.request_laser_off.connect(self.lighting.laser_off)
