@@ -255,29 +255,37 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def perform_auto_connect(self):
-        ports = QSerialPortInfo.availablePorts()
-        self.info_panel.add_log("--- Auto-Conexión ---")
-        
-        FLUIDNC_IDS = ["CP210", "Silicon Labs", "Espressif"]
-        ARDUINO_IDS = ["CH340", "USB-SERIAL", "Arduino"]
-        
-        fluidnc_found = False
-        arduino_found = False
+        """
+        Conecta automáticamente usando los puertos guardados en parameters.json.
+        """
+        self.info_panel.add_log("--- Auto-Conexión por Configuración ---")
 
-        for port in ports:
-            info = f"{port.description()} {port.manufacturer()}".upper()
-            name = port.portName()
-            
-            if not fluidnc_found and any(x in info for x in FLUIDNC_IDS):
-                self.info_panel.add_log(f"✅ Máquina detectada en {name}")
-                self.request_connect_fluidnc.emit(name, 115200)
-                fluidnc_found = True
-                continue
-            
-            if not arduino_found and any(x in info for x in ARDUINO_IDS):
-                self.info_panel.add_log(f"✅ LedLaser detectado en {name}")
-                self.request_connect_arduino.emit(name, 115200)
-                arduino_found = True
+        # 1. Leer los puertos definidos en el archivo JSON
+        target_machine = self.settings_manager.get("machine_port")
+        target_sensor = self.settings_manager.get("ledlaser_port")
+        
+        # 2. Obtener lista de puertos físicos disponibles en el PC (para validar)
+        available_ports = [p.portName() for p in QSerialPortInfo.availablePorts()]
+
+        # 3. Intentar conectar la MÁQUINA (FluidNC)
+        if target_machine:
+            if target_machine in available_ports:
+                self.info_panel.add_log(f"✅ Puerto Máquina encontrado: {target_machine}")
+                self.request_connect_fluidnc.emit(target_machine, 115200)
+            else:
+                self.info_panel.add_log(f"⚠️ El puerto guardado {target_machine} (Máquina) no está conectado.")
+        else:
+            self.info_panel.add_log("⚠️ No hay puerto de Máquina configurado en parameters.json.")
+
+        # 4. Intentar conectar el SENSOR (Arduino)
+        if target_sensor:
+            if target_sensor in available_ports:
+                self.info_panel.add_log(f"✅ Puerto Sensor encontrado: {target_sensor}")
+                self.request_connect_arduino.emit(target_sensor, 115200)
+            else:
+                self.info_panel.add_log(f"⚠️ El puerto guardado {target_sensor} (Sensor) no está conectado.")
+        else:
+            self.info_panel.add_log("⚠️ No hay puerto de Sensor configurado en parameters.json.")
 
     def closeEvent(self, event):
         self.cam1_driver.stop()
