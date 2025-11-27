@@ -162,6 +162,7 @@ class MainWindow(QMainWindow):
         self.connect_panel.btn_connect_arduino.clicked.connect(self.emit_connect_arduino_signal)
         self.connect_panel.btn_disconnect_arduino.clicked.connect(self.arduino_conn.disconnect_from)
         self.arduino_conn.connection_changed.connect(self.connect_panel.set_arduino_status)
+        self.connection.connection_changed.connect(self.job.update_connection_status)
 
         # --- LedPanel ---
         self.led_panel.request_led_brightness.connect(self.lighting.set_brightness)
@@ -206,6 +207,7 @@ class MainWindow(QMainWindow):
         self.controller.position_updated.connect(self.info_panel.update_position)
         self.controller.machine_ready.connect(self.move_controls.set_controls_enabled)
         self.connection.connection_changed.connect(self.action_panel.set_enabled)
+        self.controller.homing_changed.connect(self.job.update_homing_status)
 
         # --- Arduino Internals ---
         self.lighting.command_to_send.connect(self.arduino_conn.send_line)

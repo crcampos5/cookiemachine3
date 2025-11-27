@@ -27,12 +27,13 @@ class MachineController(QObject):
     log_message = Signal(str)              # Mensajes para el usuario (Registro)
     machine_ready = Signal(bool)           # True si está en Idle
     command_to_send = Signal(str)          # Para enviar al puerto serial
+    homing_changed = Signal(bool)     # True=Homed, False=No Homed
 
     def __init__(self):
         super().__init__()
         self.machine_state = "Desconectado"
         self.connection_state = ConnectionState.DISCONNECTED
-        print("MachineController (Cerebro GRBL + Logs) inicializado.")
+        
 
     @Slot()
     def initialize_thread(self):
@@ -108,6 +109,8 @@ class MachineController(QObject):
 
         # --- 4. Mensajes informativos ---
         if line.startswith('[MSG:'):
+            if 'Homed:XYZ' in line:
+                self.homing_changed.emit(True)
             self.log_message.emit(f"ℹ️ {line}")
             self.command_to_send.emit("?") 
             return

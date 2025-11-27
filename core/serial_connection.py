@@ -59,7 +59,6 @@ class SerialConnection(QObject):
                     port_info['display'] = f"{port.portName()}: {port.description()}"
                 
                 port_list.append(port_info)
-                #print(f"--- DETECTADO: {port_info} ---") # Ver esto en consola es clave
             
             if not port_list:
                 self.log_message.emit("No se encontraron puertos COM.")

@@ -31,6 +31,8 @@ class JobController(QObject):
     def __init__(self):
         super().__init__()
         
+        self.machine_is_connected = False
+        self.machine_is_homed = False
         self._is_running = False
         self._is_paused = False
         self._machine_state = "Unknown"
@@ -60,6 +62,14 @@ class JobController(QObject):
     def update_laser_frame(self, frame):
         self._last_laser_frame = frame
 
+    @Slot(bool)
+    def update_connection_status(self, is_connected):
+        self.machine_is_connected = is_connected
+
+    @Slot(bool)
+    def update_homing_status(self, is_homed):
+        self.machine_is_homed = is_homed
+
     # --- CONTROL INTELIGENTE DEL TRABAJO ---
 
     @Slot(str)
@@ -72,11 +82,18 @@ class JobController(QObject):
     @Slot()
     def on_resume_request(self):
         """ 
-        Lógica inteligente para el botón 'Reanudar':
+        Lógica inteligente para el botón 'RUN':
         1. Si no está corriendo y hay archivo -> INICIA
         2. Si está pausado -> REANUDA
         3. Si ya está corriendo normal -> Ignorar
         """
+        # VERIFICACIÓN ANTES DE INICIAR
+        ready, msg = self.verify_ready_to_run()
+        if not ready:
+            self.log_message.emit(f"Error de inicio: {msg}")
+            # Opcional: emitir señal de error para un popup
+            return
+        
         if not self._is_running:
             if self._loaded_file:
                 self.start_job(self._loaded_file)
@@ -89,6 +106,7 @@ class JobController(QObject):
             self.request_command.emit("~")
 
     # --- MÉTODOS INTERNOS DE CONTROL ---
+       
 
     def start_job(self, file_path):
         self._is_running = True
@@ -205,6 +223,26 @@ class JobController(QObject):
         self.job_finished.emit()
 
     # --- RUTINAS DE AYUDA ---
+
+    def verify_ready_to_run(self):
+        """
+        Realiza comprobaciones de seguridad antes de mover la máquina.
+        Retorna: (bool, str) -> (Éxito, Mensaje de error)
+        """
+        # 1. Verificar Conexión
+        # Asumiendo que machine_controller tiene acceso a la conexión o un método is_connected()
+        if not self.machine_is_connected:
+            return False, "La máquina está desconectada. Verifique la conexion de la maquina."
+
+        # 2. Verificar Home (Referenciado)
+        # Necesitamos que machine_controller tenga una bandera 'is_homed'
+        if not self.machine_is_homed:
+            return False, "La máquina no ha realizado Home. Ejecute el homing primero."
+
+        # 3. Futuras verificaciones (Espacio para tu implementación)
+        # Ejemplo: if not self.check_air_pressure(): return False, "Presión de aire baja"
+        
+        return True, "Sistema listo"
 
     def _move_and_wait(self, x, y):
         cmd = f"G0 X{x:.3f} Y{y:.3f}"
