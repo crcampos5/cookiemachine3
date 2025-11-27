@@ -36,11 +36,11 @@ class ActionPanel(QGroupBox):
         # --- Botones de Control (Pausa / Reanudar) ---
         control_layout = QHBoxLayout()
         
-        self.pause_button = QPushButton("Pausar (!)")
+        self.pause_button = QPushButton("PAUSAR")
         self.pause_button.setMinimumHeight(40)
         self.pause_button.setStyleSheet("background-color: #FFF176; color: black; font-weight: bold;")
         
-        self.resume_button = QPushButton("Reanudar (~)")
+        self.resume_button = QPushButton("RUN")
         self.resume_button.setMinimumHeight(40)
         self.resume_button.setStyleSheet("background-color: #81C784; color: black; font-weight: bold;")
         

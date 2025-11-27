@@ -2,16 +2,20 @@
     "machine_port": "COM10",
     "ledlaser_port": "COM9",
     "valor_pixel_to_mm": 4.23,
-    "laser_number": 0,
-    "camera_number": 1,
-    "resolution": [
-        640,
-        480
-    ],
-    "resolution_laser": [
-        1600,
-        1200
-    ],
+    "cam_central": {
+        "cam_central_index": 1,
+        "resolution_central": [
+            640,
+            480
+        ]
+    },
+    "cam_laser": {
+        "cam_laser_index": 0,
+        "resolution_laser": [
+            1600,
+            1200
+        ]
+    },
     "z_travel": -85.7,
     "laser_cero": 123.2,
     "off_set_nozzle": -47.71,

@@ -26,7 +26,7 @@ class FilePanel(QGroupBox):
         self.lbl_filename.setWordWrap(True)
         
         # Botón de Carga (Solo uno)
-        self.btn_load = QPushButton("📂 Cargar G-code")
+        self.btn_load = QPushButton("📂 Cargar Cookie G-code")
         
         layout.addWidget(self.lbl_filename)
         layout.addWidget(self.btn_load)
@@ -42,9 +42,9 @@ class FilePanel(QGroupBox):
         """ Abre el selector de archivos nativo. """
         fname, _ = QFileDialog.getOpenFileName(
             self, 
-            "Abrir diseño G-code", 
+            "Abrir diseño Cookie G-code", 
             "", 
-            "G-code Files (*.gcode *.nc *.txt)"
+            "G-code Files (*.cgc)"
         )
         
         if fname:

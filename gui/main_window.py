@@ -76,12 +76,13 @@ class MainWindow(QMainWindow):
         self.arduino_conn.moveToThread(self.arduino_conn_thread)
         
         # 3. Cámaras
-        self.cam1_driver = CameraDriver(0)
+        self.cam_driver_central = CameraDriver("cam_central", self.settings_manager)
         self.cam1_thread = QThread()
-        self.cam1_driver.moveToThread(self.cam1_thread)
-        self.cam2_driver = CameraDriver(1)
+        self.cam_driver_central.moveToThread(self.cam1_thread)
+
+        self.cam_driver_laser = CameraDriver("cam_laser", self.settings_manager)
         self.cam2_thread = QThread()
-        self.cam2_driver.moveToThread(self.cam2_thread)
+        self.cam_driver_laser.moveToThread(self.cam2_thread)
 
         # 4. JobController
         self.job = JobController()
@@ -192,8 +193,8 @@ class MainWindow(QMainWindow):
         self.job.request_laser_off.connect(self.lighting.laser_off)
         
         # 4. Hardware -> JobController
-        self.cam1_driver.frame_captured.connect(self.job.update_main_frame)
-        self.cam2_driver.frame_captured.connect(self.job.update_laser_frame)
+        self.cam_driver_central.frame_captured.connect(self.job.update_main_frame)
+        self.cam_driver_laser.frame_captured.connect(self.job.update_laser_frame)
         self.controller.status_changed.connect(self.job.update_machine_status)
 
         # --- FluidNC Internals ---
@@ -214,10 +215,10 @@ class MainWindow(QMainWindow):
         self.move_controls.jog_command.connect(self.controller.send_command)
 
         # --- Cameras ---
-        self.cam1_driver.frame_captured.connect(self.camera_widget.set_image)
-        self.cam2_driver.frame_captured.connect(self.laser_widget.set_image)
-        QTimer.singleShot(2000, self.cam1_driver.start)
-        QTimer.singleShot(2000, self.cam2_driver.start)
+        self.cam_driver_central.frame_captured.connect(self.camera_widget.set_image)
+        self.cam_driver_laser.frame_captured.connect(self.laser_widget.set_image)
+        QTimer.singleShot(2000, self.cam_driver_central.start)
+        QTimer.singleShot(2000, self.cam_driver_laser.start)
 
         # --- Logs ---
         self.controller.log_message.connect(self.info_panel.add_log)
@@ -288,8 +289,8 @@ class MainWindow(QMainWindow):
             self.info_panel.add_log("⚠️ No hay puerto de Sensor configurado en parameters.json.")
 
     def closeEvent(self, event):
-        self.cam1_driver.stop()
-        self.cam2_driver.stop()
+        self.cam_driver_central.stop()
+        self.cam_driver_laser.stop()
         self.fluidnc_thread.quit()
         self.fluidnc_conn_thread.quit()
         self.arduino_conn_thread.quit()
