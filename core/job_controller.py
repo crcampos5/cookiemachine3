@@ -21,6 +21,7 @@ class JobController(QObject):
     progress_updated = Signal(int, int)
     job_finished = Signal()
     job_stopped = Signal()
+    gcode_loaded_info = Signal(dict)
     
     # Señales Hardware
     request_command = Signal(str)      
@@ -44,6 +45,9 @@ class JobController(QObject):
         
         self._last_main_frame = None
         self._last_laser_frame = None
+        self._loaded_operations = []
+        self._injectors_data = None
+        self._metadata_gcode = None
         
         self.template = Template()
         self.processor = GcodeProcessor()
@@ -77,10 +81,28 @@ class JobController(QObject):
 
     @Slot(str)
     def load_file(self, file_path):
-        """ Solo guarda el archivo en memoria, listo para iniciar. """
-        self._loaded_file = file_path
-        self.log_message.emit(f"Archivo preparado: {file_path.split('/')[-1]}")
-        self.log_message.emit("Presione 'Reanudar' para iniciar el trabajo.")
+        """ 
+        Parsea el archivo, extrae metadata para la GUI y prepara las operaciones.
+        """
+        self.log_message.emit(f"📂 Cargando: {file_path.split('/')[-1]}...")
+        
+        # 1. Usar el procesador para leer TODO
+        try:
+            self._metadata_gcode, self._injectors_data, self._loaded_operations = self.processor.parse_custom_gcode(file_path)
+            
+            # 2. Guardar operaciones para cuando se pulse RUN
+            self._loaded_file = file_path # Mantener por compatibilidad
+            
+            # 3. Emitir datos a la GUI (InjectorPanel)
+            if self._injectors_data:
+                self.gcode_loaded_info.emit(self._injectors_data)
+                self.log_message.emit("✅ Inyectores configurados según archivo.")
+            else:
+                self.log_message.emit("⚠️ Archivo sin definición de inyectores.")
+
+            
+        except Exception as e:
+            self.log_message.emit(f"❌ Error leyendo archivo: {e}")
 
     @Slot()
     def on_resume_request(self):

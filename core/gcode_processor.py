@@ -74,7 +74,7 @@ class GcodeProcessor:
                 t_nozzle = re.search(r'NOZZLE="([^"]+)"', line)
                 
                 if t_id:
-                    tid = int(t_id.group(1))
+                    tid = str(t_id.group(1))
                     injectors[tid] = {
                         "color": t_color.group(1) if t_color else "#FFFFFF",
                         "name": t_name.group(1) if t_name else f"Injector {tid}",

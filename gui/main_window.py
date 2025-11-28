@@ -237,6 +237,9 @@ class MainWindow(QMainWindow):
         
         # 2. Válvula -> Máquina (MachineController)
         self.injector_panel.request_valve.connect(self.controller.set_valve)
+        # 2. JobController -> InjectorPanel (Info del G-code)
+        self.job.gcode_loaded_info.connect(self.injector_panel.update_from_gcode_data)
+        self.injector_panel.log_message.connect(self.info_panel.add_log)
 
     @Slot()
     def emit_connect_fluidnc_signal(self):
@@ -261,7 +264,16 @@ class MainWindow(QMainWindow):
         """
         Conecta automáticamente usando los puertos guardados en parameters.json.
         """
+        self.info_panel.add_log("--- Inicializando Sistema ---")
+        
+        # 1. Configurar Inyectores (Deshabilitar los que estén en parameters.json)
+        injectors_conf = self.settings_manager.get("injectors")
+        if injectors_conf:
+            self.injector_panel.apply_startup_config(injectors_conf)
+            self.info_panel.add_log("⚙️ Panel de inyectores actualizado desde configuración.")
+
         self.info_panel.add_log("--- Auto-Conexión por Configuración ---")
+
 
         # 1. Leer los puertos definidos en el archivo JSON
         target_machine = self.settings_manager.get("machine_port")
