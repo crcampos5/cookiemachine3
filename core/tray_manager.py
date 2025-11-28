@@ -7,7 +7,7 @@ y verifica los límites de seguridad.
 import re
 import numpy as np
 
-class Template:
+class TrayManager:
 
     def __init__(self) -> None:
         pass

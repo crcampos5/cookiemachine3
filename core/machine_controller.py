@@ -9,6 +9,7 @@ from PySide6.QtCore import QObject, Signal, Slot
 
 # Importar los códigos de error/alarma
 from core.fluidnc_codes import FLUIDNC_ALARMS, FLUIDNC_ERRORS
+from settings.settings_manager import SettingsManager
 
 class ConnectionState(Enum):
     DISCONNECTED = 0
@@ -29,10 +30,16 @@ class MachineController(QObject):
     command_to_send = Signal(str)          # Para enviar al puerto serial
     homing_changed = Signal(bool)     # True=Homed, False=No Homed
 
-    def __init__(self):
+    def __init__(self, settings_manager: SettingsManager):
         super().__init__()
         self.machine_state = "Desconectado"
         self.connection_state = ConnectionState.DISCONNECTED
+        self.settings = settings_manager
+        # Diccionario para guardar los offsets en memoria (Cache)
+        self.tool_offsets = {} 
+        
+        # 2. Cargar offsets inmediatamente al iniciar
+        self.reload_tool_offsets()
         
 
     @Slot()
@@ -118,6 +125,54 @@ class MachineController(QObject):
             self.log_message.emit(f"🔌 {line}")
             self.command_to_send.emit("$Report/Interval=100")
 
+    def reload_tool_offsets(self):
+        """
+        Lee parameters.json. 
+        Asume que cada herramienta tiene su offset absoluto definido explícitamente.
+        """
+        self.tool_offsets.clear()
+        
+        # 1. Cargar Sensores (Cámara y Láser)
+        # JSON: "off_set_sensor": { "camera": [x, y], "laser": [x, y] }
+        sensor_offsets = self.settings.get("off_set_sensor", {})
+        self.tool_offsets['camera'] = sensor_offsets.get("camera", [0.0, 0.0])
+        self.tool_offsets['laser'] = sensor_offsets.get("laser", [0.0, 0.0])
+        
+        # 2. Cargar Inyectores
+        # JSON: "injectors": { "injector1": { "off_set": [x, y] }, ... }
+        injectors_data = self.settings.get("injectors", {})
+        
+        for i in range(1, 5):
+            key = f"injector{i}"
+            if key in injectors_data:
+                # Leemos directamente el array [x, y] del inyector
+                offset = injectors_data[key].get("off_set", [0.0, 0.0])
+                self.tool_offsets[key] = offset
+            else:
+                self.tool_offsets[key] = [0.0, 0.0]
+            
+        #print(f"🔧 Herramientas Cargadas (Directo): {self.tool_offsets}")
+    
+    @Slot(float, float, str)
+    def move_to_tool(self, target_x, target_y, tool_name="nozzle"):
+        """
+        Mueve la máquina para posicionar la herramienta solicitada en (target_x, target_y).
+        Calcula: Pos_Maquina = Objetivo - Offset_Herramienta
+        """
+        # 1. Buscar offset (si no existe, usa 0,0)
+        offset = self.tool_offsets.get(tool_name, [0.0, 0.0])
+        
+        # 2. Calcular coordenadas máquina
+        machine_x = target_x - offset[0]
+        machine_y = target_y - offset[1]
+        
+        # 3. Mover (G0 = Rápido)
+        cmd = f"G0 X{machine_x:.3f} Y{machine_y:.3f}"
+        
+        self.log_message.emit(f"🤖 Tool '{tool_name}': Ir a ({target_x}, {target_y}) -> Motor: X{machine_x:.2f} Y{machine_y:.2f}")
+        self.send_command(cmd)
+        self.tool_changed.emit(tool_name)
+
     def _emit_coordinates(self, coords_str):
         try:
             parts = coords_str.split(',')
@@ -170,8 +225,6 @@ class MachineController(QObject):
             self.connection_state = ConnectionState.CONNECTED
             self.log_message.emit("✅ Conexión establecida.")
             self.command_to_send.emit("?") # Estado inicial
-            #self.command_to_send.emit("$10=1") # Forzar MPos
-            #self.command_to_send.emit("$Report/Interval=100") # Auto-reporte
             
         else:
             self.connection_state = ConnectionState.DISCONNECTED

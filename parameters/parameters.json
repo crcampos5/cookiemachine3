@@ -18,9 +18,9 @@
         ]
     },
     "table_size": [7 , 5],
+    "quadrant_size": [103, 103],
     "z_travel": -85.7,
     "laser_cero": 123.2,
-    "off_set_nozzle": -47.71,
     "nozzle_spacing": 3.0,
     "activation_height": 2.0,
     "injectors" : {
