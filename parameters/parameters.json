@@ -11,33 +11,48 @@
     },
     "cam_laser": {
         "cam_laser_index": 0,
+        "expositure": -8,
         "resolution_laser": [
             1600,
             1200
         ]
     },
+    "table_size": [7 , 5],
     "z_travel": -85.7,
     "laser_cero": 123.2,
     "off_set_nozzle": -47.71,
     "nozzle_spacing": 3.0,
     "activation_height": 2.0,
-    "modes": {
-        "Boquilla": [
-            0,
-            0
-        ],
-        "Camara": [
+    "injectors" : {
+        "injector1" :{
+            "off_set" : [0, 0],
+            "disabled" : 1
+        },
+        "injector2" :{
+            "off_set" : [0, 0],
+            "disabled" : 0
+        },
+        "injector3" :{
+            "off_set" : [0, 0],
+            "disabled" : 0
+        },
+        "injector4" :{
+            "off_set" : [0, 0],
+            "disabled" : 1
+        }
+    },
+    "off_set_sensor": {
+        "camera": [
             -17.401,
             -196.294
         ],
-        "Laser": [
+        "laser": [
             -52.178,
             -198.318
         ]
-    },
-    "laser_intensity": 800,
-    "expositure": -8,
+    },    
     "laser_sensor": {
-        "type": "point"
+        "type": "point",
+        "laser_intensity": 100
     }
 }

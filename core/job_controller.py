@@ -12,6 +12,7 @@ from PySide6.QtCore import QObject, Signal, Slot, QThread
 from core.template import Template
 from core.gcode_processor import GcodeProcessor
 import core.vision_utils as vision
+from settings.settings_manager import SettingsManager
 
 class JobController(QObject):
     
@@ -28,9 +29,10 @@ class JobController(QObject):
     request_laser_on = Signal()        
     request_laser_off = Signal()
 
-    def __init__(self):
+    def __init__(self, settings_manager: SettingsManager):
         super().__init__()
-        
+
+        self.settings = settings_manager
         self.machine_is_connected = False
         self.machine_is_homed = False
         self._is_running = False
@@ -45,8 +47,9 @@ class JobController(QObject):
         
         self.template = Template()
         self.processor = GcodeProcessor()
-        self.rows = 7
-        self.cols = 6
+        table_size = self.settings.get("table_size")
+        self.rows = table_size[0]
+        self.cols = table_size[1]
 
     # --- SLOTS DE ENTRADA ---
 

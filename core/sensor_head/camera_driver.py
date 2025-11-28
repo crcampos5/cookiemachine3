@@ -7,12 +7,14 @@ import numpy as np
 import os
 from PySide6.QtCore import QObject, Signal, Slot, QThread
 
+from settings.settings_manager import SettingsManager
+
 class CameraDriver(QObject):
     frame_captured = Signal(np.ndarray)
     error_occurred = Signal(str)
     status_changed = Signal(str)
 
-    def __init__(self, camera_name: str, settings_manager):
+    def __init__(self, camera_name: str, settings_manager: SettingsManager):
         super().__init__()
         self.camera_name = camera_name
         self.settings = settings_manager
@@ -54,7 +56,7 @@ class CameraDriver(QObject):
                 self.req_width = value[0]
                 self.req_height = value[1]
 
-        print(f"Configurando {self.camera_name}: Index={self.camera_index}, Res={self.req_width}x{self.req_height}")
+        #print(f"Configurando {self.camera_name}: Index={self.camera_index}, Res={self.req_width}x{self.req_height}")
 
     def _auto_load_calibration(self):
         """

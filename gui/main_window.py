@@ -4,7 +4,7 @@ Versión Vertical (1360x768): Integra FluidNC + Sensores + Nueva GUI Modular.
 Conexión Ajustada: Resume inicia el trabajo.
 """
 
-from PySide6.QtCore import QThread, Slot, Signal, QTimer
+from PySide6.QtCore import QThread, Slot, Signal, QTimer, Qt
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QVBoxLayout
 from PySide6.QtSerialPort import QSerialPortInfo
 
@@ -85,7 +85,7 @@ class MainWindow(QMainWindow):
         self.cam_driver_laser.moveToThread(self.cam2_thread)
 
         # 4. JobController
-        self.job = JobController()
+        self.job = JobController(self.settings_manager)
         self.job_thread = QThread()
         self.job.moveToThread(self.job_thread)
 
@@ -181,7 +181,7 @@ class MainWindow(QMainWindow):
         self.file_panel.file_selected.connect(self.job.load_file)
         
         # 2. Botones ActionPanel -> JobController
-        self.action_panel.estop_button.clicked.connect(self.job.stop_job)
+        self.action_panel.estop_button.clicked.connect(self.job.stop_job, Qt.DirectConnection)
         self.action_panel.pause_button.clicked.connect(self.job.pause_job)
         # El botón Reanudar ahora llama a on_resume_request (que inicia o reanuda)
         self.action_panel.resume_button.clicked.connect(self.job.on_resume_request)

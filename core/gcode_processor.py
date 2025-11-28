@@ -6,56 +6,118 @@ Se encarga de leer archivos, aplicar offsets, deformaciones por altura y suaviza
 
 import math
 import re
+import json
 
 class GcodeProcessor:
 
     def __init__(self):
         pass
 
-    # --- LÓGICA DE LECTURA Y PARSEO (NUEVO) ---
-
-    def parse_gcode_file(self, file_path):
+    def parse_custom_gcode(self, file_path):
         """
-        Lee el archivo desde el disco y separa las líneas de dibujo 
-        de los puntos de escaneo (marcados con 'point_scan').
+        Parsea el formato .cgc agrupando las operaciones por inyector.
         
-        Retorna: (gcode_draw, gcode_scan)
+        Retorna:
+            - metadata (dict): Información del encabezado JSON.
+            - injectors (dict): Configuración de cada inyector (color, nozzle, name).
+            - operations (list): Lista de diccionarios, donde cada uno representa una
+                                 sección continua de trabajo con un inyector específico.
+                                 Formato: {'injector_id': int, 'gcode_lines': [str, str, ...]}
         """
+        metadata = {}
+        injectors = {}
+        operations = []
+        
+        # Buffer para el JSON del header
+        json_buffer = ""
+        reading_json = False
+        
+        # Estado actual de la operación
+        current_op = None 
+
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
         except Exception as e:
             print(f"Error leyendo archivo: {e}")
-            return [], []
-
-        gcode_draw = []
-        gcode_scan = []
-        
-        # Regex para encontrar coordenadas (ej: X10.5)
-        pattern = re.compile(r'([A-Z][^A-Z\s]*)')
+            return {}, {}, []
 
         for line in lines:
-            clean_line = line.strip()
-            if not clean_line: continue
+            original_line = line
+            line = line.strip()
+            if not line: continue
+
+            # --- 1. PARSEO DEL HEADER (JSON) ---
+            if "HEADER START" in line:
+                reading_json = True
+                continue
+            if "HEADER END" in line:
+                reading_json = False
+                try:
+                    metadata = json.loads(json_buffer)
+                except json.JSONDecodeError as e:
+                    print(f"Error parseando JSON header: {e}")
+                continue
             
-            # Caso A: Puntos de escaneo (comentario especial 'point_scan')
-            if 'point_scan' in clean_line:
-                # Extraer solo X e Y para el movimiento de escaneo
-                parts = pattern.findall(clean_line)
-                valid_parts = [p for p in parts if p.startswith('X') or p.startswith('Y')]
-                if valid_parts:
-                    # Creamos una línea de movimiento rápido G0
-                    scan_line = "G0 " + " ".join(valid_parts)
-                    gcode_scan.append(scan_line)
+            if reading_json:
+                # Quitamos el punto y coma inicial para reconstruir el JSON válido
+                clean_part = line.lstrip(';').strip()
+                json_buffer += clean_part
+                continue
+
+            # --- 2. PARSEO DE DEFINICIONES DE INYECTORES ---
+            # Ejemplo: ; DEFINE_INJECTOR ID=0 COLOR="#000000ff" NAME="Borde Negro" NOZZLE="2.0mm"
+            if "DEFINE_INJECTOR" in line:
+                t_id = re.search(r'ID=(\d+)', line)
+                t_color = re.search(r'COLOR="([^"]+)"', line)
+                t_name = re.search(r'NAME="([^"]+)"', line)
+                t_nozzle = re.search(r'NOZZLE="([^"]+)"', line)
+                
+                if t_id:
+                    tid = int(t_id.group(1))
+                    injectors[tid] = {
+                        "color": t_color.group(1) if t_color else "#FFFFFF",
+                        "name": t_name.group(1) if t_name else f"Injector {tid}",
+                        "nozzle": t_nozzle.group(1) if t_nozzle else "generic"
+                    }
+                continue
+
+            # --- 3. PARSEO DEL CUERPO (OPERACIONES POR BLOQUE) ---
             
-            # Caso B: Líneas de dibujo normales
-            else:
-                # Ignoramos comentarios puros de G-code
-                if clean_line.startswith(';') or clean_line.startswith('('):
-                    continue
-                gcode_draw.append(clean_line)
-        
-        return gcode_draw, gcode_scan
+            # Detectar cambio de inyector -> Inicia nueva operación
+            if "CHANGE_INJECTOR" in line:
+                # 1. Si ya había una operación en curso, la guardamos en la lista final
+                if current_op is not None:
+                    operations.append(current_op)
+                
+                # 2. Extraemos el ID del nuevo inyector
+                t_id = re.search(r'ID=(\d+)', line)
+                new_id = int(t_id.group(1)) if t_id else -1
+                
+                # 3. Creamos el nuevo bloque de operación
+                current_op = {
+                    'injector_id': new_id,
+                    'gcode_lines': []
+                }
+                continue
+
+            # Detectar líneas de G-code (G0, G1, M8, etc.) o coordenadas
+            # Se asume que cualquier línea que no sea comentario de estructura es G-code
+            if not line.startswith(';') or line.startswith('('):
+                # Solo agregamos si tenemos una operación activa (un inyector seleccionado)
+                if current_op is not None:
+                    current_op['gcode_lines'].append(original_line.strip())
+                else:
+                    # Caso borde: G-code antes del primer CHANGE_INJECTOR
+                    # Podríamos ignorarlo o crear una operación por defecto.
+                    pass
+
+        # --- FINALIZACIÓN ---
+        # Al terminar de leer el archivo, si quedó una operación abierta, la agregamos
+        if current_op is not None and current_op['gcode_lines']:
+            operations.append(current_op)
+
+        return metadata, injectors, operations
 
     # --- LÓGICA DE DEFORMACIÓN Z (Ex-Scanner) ---
 
