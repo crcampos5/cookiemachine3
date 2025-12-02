@@ -7,9 +7,10 @@ Versión: Soporta carga previa y botón inteligente Start/Resume.
 import time
 import re
 import numpy as np
-from PySide6.QtCore import QObject, Signal, Slot, QThread
+import cv2 as cv
+from PySide6.QtCore import QObject, Signal, Slot, QThread, QCoreApplication
 
-from core.template import Template
+from core.tray_manager import TrayManager
 from core.gcode_processor import GcodeProcessor
 import core.vision_utils as vision
 from settings.settings_manager import SettingsManager
@@ -22,9 +23,12 @@ class JobController(QObject):
     job_finished = Signal()
     job_stopped = Signal()
     gcode_loaded_info = Signal(dict)
+    processed_image_ready = Signal(np.ndarray)
+
     
     # Señales Hardware
-    request_command = Signal(str)      
+    request_command = Signal(str)
+    request_move_tool = Signal(int,int,str)      
     request_lighting_on = Signal()     
     request_lighting_off = Signal()
     request_laser_on = Signal()        
@@ -48,8 +52,9 @@ class JobController(QObject):
         self._loaded_operations = []
         self._injectors_data = None
         self._metadata_gcode = None
+        self._centro_camera = [117.5,122]
         
-        self.template = Template()
+        self.tray_manager = TrayManager(self.settings)
         self.processor = GcodeProcessor()
         table_size = self.settings.get("table_size")
         self.rows = table_size[0]
@@ -92,6 +97,9 @@ class JobController(QObject):
             
             # 2. Guardar operaciones para cuando se pulse RUN
             self._loaded_file = file_path # Mantener por compatibilidad
+
+            if self._metadata_gcode:
+                self._centro_camera = self._metadata_gcode["centro"]
             
             # 3. Emitir datos a la GUI (InjectorPanel)
             if self._injectors_data:
@@ -136,11 +144,12 @@ class JobController(QObject):
     def start_job(self, file_path):
         self._is_running = True
         self._is_paused = False
-        try:
-            self._run_process(file_path)
-        except Exception as e:
-            self.log_message.emit(f"🛑 Error crítico: {e}")
-            self.stop_job()
+        self._run_process(file_path)
+        #try:
+        #    self._run_process(file_path)
+        #except Exception as e:
+        #    self.log_message.emit(f"🛑 Error crítico: {e}")
+        #    self.stop_job()
 
     @Slot()
     def stop_job(self):
@@ -164,19 +173,22 @@ class JobController(QObject):
     def _run_process(self, file_path):
         self.log_message.emit("📂 Procesando archivo...")
         
-        # 1. PARSEO
-        gcode_draw, gcode_scan_pattern = self.processor.parse_gcode_file(file_path)
+        # 1. Obtener gcode de escaneo 
+        operation = self._loaded_operations[0]
+        injector_id = operation["gcode_lines"]
+        gcode_operation = operation["gcode_lines"]
+        gcode_scan = self.processor.resample_gcode_scan(gcode_operation, 2)
         
-        if not gcode_scan_pattern:
+        if not gcode_scan:
             self.log_message.emit("⚠️ No se encontraron puntos de escaneo.")
 
-        # 2. MATRIZ
-        matrix = self.template.generar_matriz_coordenadas(tipo_mesa='Toda')
+        # 2. MATRIZ DE CUADRANTES
+        matriz_cuadrantes = self.tray_manager.generar_matriz_cuadrantes(tipo_mesa='Toda')
         total_cookies = self.rows * self.cols
         count = 0
         
         self.log_message.emit("🚀 Iniciando ciclo.")
-        self.request_lighting_on.emit() 
+        #self.request_lighting_on.emit() 
 
         for i in range(self.rows):
             col_iter = range(self.cols) if i % 2 == 0 else range(self.cols - 1, -1, -1)
@@ -186,20 +198,28 @@ class JobController(QObject):
                 self._check_pause()
                 
                 count += 1
-                pos_teorica = matrix[i, j]
+                pos_camara = np.array(matriz_cuadrantes[i, j]) + np.array(self._centro_camera)
                 self.progress_updated.emit(count, total_cookies)
                 self.log_message.emit(f"🍪 Procesando Galleta {count}")
 
                 # --- PASO 1: VISIÓN ---
-                self._move_and_wait(pos_teorica[0], pos_teorica[1])
-                time.sleep(0.5)
+                self.request_lighting_on.emit()
+                time.sleep(2)
+                self._move_and_wait(pos_camara[0], pos_camara[1])
+                time.sleep(2)
                 
                 img = self._get_main_frame_sync()
                 if img is None:
                     self.log_message.emit("❌ Error cámara. Saltando.")
                     continue
 
-                centroids, _ = vision.find_cookie_centroids(img)
+                cv.imwrite("test_img.jpg", img)
+
+                centroids, debug_img = vision.find_cookie_pose(img)
+
+                if debug_img is not None:
+                    self.processed_image_ready.emit(debug_img)
+
                 if not centroids:
                     self.log_message.emit("⚠️ No se detectó galleta. Saltando.")
                     continue
@@ -208,14 +228,14 @@ class JobController(QObject):
                 sorted_centroids = vision.sort_points_by_distance(centroids, centro_img)
                 pixel_galleta = sorted_centroids[0]
                 
-                pos_real = vision.convert_pixel_to_mm(pixel_galleta, pos_teorica)
+                pos_real = vision.convert_pixel_to_mm(pixel_galleta, pos_camara)
                 self.log_message.emit(f"🎯 Galleta en: {pos_real}")
 
                 # --- PASO 2: ESCANEO ---
                 offset_x = pos_real[0]
                 offset_y = pos_real[1]
                 
-                scan_route_real = self.processor.sumar_offset_xy(gcode_scan_pattern, offset_x, offset_y)
+                scan_route_real = self.processor.sumar_offset_xy(gcode_scan, offset_x, offset_y)
                 
                 self.request_lighting_off.emit()
                 self.request_laser_on.emit()
@@ -224,7 +244,7 @@ class JobController(QObject):
                 alturas_leidas = self._run_scan_routine(scan_route_real)
                 
                 self.request_laser_off.emit()
-                self.request_lighting_on.emit()
+                #self.request_lighting_on.emit()
 
                 if not alturas_leidas:
                     self.log_message.emit("⚠️ Fallo escaneo. Usando altura base.")
@@ -232,7 +252,7 @@ class JobController(QObject):
                 # --- PASO 3: PROCESAMIENTO ---
                 z_umbral = self.processor.calcular_z_umbral(alturas_leidas, 0, 10)
                 
-                gcode_draw_moved = self.processor.sumar_offset_xy(gcode_draw, offset_x, offset_y)
+                gcode_draw_moved = self.processor.sumar_offset_xy(gcode_operation, offset_x, offset_y)
                 gcode_final = self.processor.aplicar_mapa_alturas(gcode_draw_moved, alturas_leidas, z_umbral)
                 gcode_final = self.processor.suavizar_z(gcode_final)
                 
@@ -270,26 +290,23 @@ class JobController(QObject):
         return True, "Sistema listo"
 
     def _move_and_wait(self, x, y):
-        cmd = f"G0 X{x:.3f} Y{y:.3f}"
-        self.request_command.emit(cmd)
-        time.sleep(0.1) 
+        self.request_move_tool.emit(x,y,"camera")
         self._wait_for_idle()
 
     def _wait_for_idle(self):
         while self._machine_state != "Idle":
             if not self._is_running: break
             self._check_pause()
-            time.sleep(0.05)
 
     def _check_pause(self):
         while self._is_paused:
-            time.sleep(0.1)
             if not self._is_running: break
 
     def _get_main_frame_sync(self):
         self._last_main_frame = None
         timeout = 0
         while self._last_main_frame is None:
+            QCoreApplication.processEvents()
             time.sleep(0.05)
             timeout += 0.05
             if timeout > 3.0 or not self._is_running: return None

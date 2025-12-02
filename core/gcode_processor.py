@@ -282,3 +282,97 @@ class GcodeProcessor:
                 
             new_gcode.append(new_line)
         return new_gcode
+    
+    # --- ESCANEO ---
+
+    def resample_gcode_scan(self, gcode_text, step_distance):
+        """
+        1. G1: Se interpolan a distancia exacta (cuerda continua).
+        2. G0: Se mantienen como desplazamientos (sin interpolar) y reinician el conteo.
+        3. Z y F: Se eliminan por completo.
+        """
+        new_gcode = []
+        
+        # Regex para buscar coordenadas
+        rx = re.compile(r'X([\d\.-]+)')
+        ry = re.compile(r'Y([\d\.-]+)')
+
+        # Estado actual de la máquina
+        curr_x, curr_y = 0.0, 0.0
+        
+        # Acumulador de distancia sobrante (solo para movimientos G1 continuos)
+        distance_overflow = 0.0 
+        
+        lines = gcode_text #.splitlines()
+        
+        for line in lines:
+            upper_line = line.strip().upper()
+            
+            # Ignorar líneas vacías o comentarios
+            if not upper_line or upper_line.startswith(';') or upper_line.startswith('('):
+                continue
+
+            # Detectar si hay coordenadas X o Y
+            mx = rx.search(upper_line)
+            my = ry.search(upper_line)
+            
+            # Si la línea no tiene X ni Y, la ignoramos (ej: cambios solo de Z o F)
+            if not mx and not my:
+                continue
+
+            # Obtener destino
+            target_x = float(mx.group(1)) if mx else curr_x
+            target_y = float(my.group(1)) if my else curr_y
+
+            # --- CASO 1: MOVIMIENTO RÁPIDO (G0) ---
+            if upper_line.startswith('G0'):
+                # 1. Escribimos el movimiento tal cual (pero limpio, solo X Y)
+                new_gcode.append(f"G0 X{target_x:.3f} Y{target_y:.3f}")
+                
+                # 2. Actualizamos posición actual
+                curr_x = target_x
+                curr_y = target_y
+                
+                # 3. ¡IMPORTANTE! Reiniciamos el acumulador.
+                # La próxima línea G1 empezará una trayectoria nueva desde 0.
+                distance_overflow = 0.0
+                
+                continue
+
+            # --- CASO 2: TRAYECTORIA DE TRABAJO (G1) ---
+            elif upper_line.startswith('G1'):
+                
+                # Calcular longitud del segmento
+                dx = target_x - curr_x
+                dy = target_y - curr_y
+                segment_length = math.sqrt(dx**2 + dy**2)
+                
+                # Ignorar segmentos de longitud 0
+                if segment_length <= 0.00001:
+                    continue
+
+                # Vectores unitarios
+                ux = dx / segment_length
+                uy = dy / segment_length
+                
+                # Calcular dónde cae el primer punto usando lo que sobró del anterior
+                current_dist_on_segment = step_distance - distance_overflow
+                
+                while current_dist_on_segment <= segment_length:
+                    # Calcular punto
+                    new_x = curr_x + (ux * current_dist_on_segment)
+                    new_y = curr_y + (uy * current_dist_on_segment)
+                    
+                    # Escribir punto interpolado
+                    new_gcode.append(f"G1 X{new_x:.3f} Y{new_y:.3f}")
+                    
+                    current_dist_on_segment += step_distance
+                
+                # Calcular el sobrante para el siguiente segmento G1
+                distance_overflow = segment_length - (current_dist_on_segment - step_distance)
+                
+                # Actualizar posición "real" para el cálculo matemático
+                curr_x = target_x
+                curr_y = target_y
+
+        return "\n".join(new_gcode)

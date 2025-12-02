@@ -29,6 +29,7 @@ class MachineController(QObject):
     machine_ready = Signal(bool)           # True si está en Idle
     command_to_send = Signal(str)          # Para enviar al puerto serial
     homing_changed = Signal(bool)     # True=Homed, False=No Homed
+    tool_changed = Signal(str)
 
     def __init__(self, settings_manager: SettingsManager):
         super().__init__()

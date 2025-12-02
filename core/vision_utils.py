@@ -55,6 +55,68 @@ def find_cookie_centroids(image):
 
     return list_centroides, debug_image
 
+def find_cookie_pose(image):
+    """
+    Detecta los centros y la orientación de las galletas.
+    Retorna:
+        - list_poses: Lista de tuplas (cx, cy, angle_degrees).
+        - debug_image: Imagen con cajas rotadas dibujadas.
+    """
+    # 1. Configuración de color (Amarillo/Dorado)
+    color_bajos = np.array([20, 131, 0], np.uint8)
+    color_altos = np.array([40, 255, 255], np.uint8)
+    
+    # 2. Pre-procesamiento
+    kernel = np.ones((5,5), np.uint8)
+    imageHSV = cv.cvtColor(image, cv.COLOR_BGR2HSV)
+    mask = cv.inRange(imageHSV, color_bajos, color_altos)
+    erode_image = cv.erode(mask, kernel, iterations=1)
+
+    # 3. Encontrar contornos
+    cnts, _ = cv.findContours(erode_image, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    
+    list_poses = []
+    debug_image = image.copy()
+    
+    for contour in cnts:
+        area = cv.contourArea(contour)
+        
+        if 1000 < area < 2000000:
+            # --- Cálculo de Momentos (Centroide) ---
+            M = cv.moments(contour)
+            if M["m00"] == 0: continue
+            cx = int(M["m10"] / M["m00"])
+            cy = int(M["m01"] / M["m00"])
+            
+            # --- Cálculo de Orientación (Bounding Box Rotado) ---
+            # rect = ((center_x, center_y), (width, height), angle)
+            rect = cv.minAreaRect(contour)
+            box = cv.boxPoints(rect)
+            box = np.int32(box)
+            
+            # Obtener el ángulo. En OpenCV 4.x el ángulo está entre [0, 90]
+            # Ajustamos según el lado más largo para obtener la dirección principal
+            (w_rect, h_rect) = rect[1]
+            angle = rect[2]
+            
+            # Ajuste de lógica de ángulo para alinear el eje largo
+            if w_rect < h_rect:
+                angle = angle + 90
+            
+            # Convertir a lógica cartesiana estándar si es necesario (ajuste fino según cámara)
+            # Aquí retornamos el ángulo tal cual para rotar el G-code.
+            
+            list_poses.append((cx, cy, angle))
+            
+            # Visualización
+            cv.drawContours(debug_image, [box], 0, (0, 255, 0), 2)
+            cv.circle(debug_image, (cx, cy), 5, (0, 0, 255), -1)
+            # Dibujar texto de ángulo
+            cv.putText(debug_image, f"{int(angle)} deg", (cx, cy - 20), 
+                       cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+
+    return list_poses, debug_image
+
 def sort_points_by_distance(points, reference_point):
     """
     Ordena una lista de puntos (x,y) según su cercanía a un punto de referencia.

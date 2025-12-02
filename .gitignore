@@ -26,4 +26,5 @@ Thumbs.db
 
 # 6. Archivos de prueba
 # (Tomado de tu .gitignore original)
-test.py
+vision_app.py
+test_img.jpg

@@ -33,7 +33,7 @@
             "disabled" : 0
         },
         "injector3" :{
-            "off_set" : [0, 0],
+            "off_set" : [30, 0],
             "disabled" : 0
         },
         "injector4" :{
@@ -43,16 +43,16 @@
     },
     "off_set_sensor": {
         "camera": [
-            -17.401,
-            -196.294
+            30,
+            80
         ],
         "laser": [
-            -52.178,
-            -198.318
+            54,
+            81
         ]
     },    
     "laser_sensor": {
         "type": "point",
-        "laser_intensity": 100
+        "laser_intensity": 22
     }
 }

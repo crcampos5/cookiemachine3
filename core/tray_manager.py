@@ -1,44 +1,58 @@
 """
-core/template.py
+core/tray_manager.py
 Gestiona la geometría de la bandeja de trabajo (Matriz de Galletas) 
-y verifica los límites de seguridad.
+y verifica los límites de seguridad usando la configuración global.
 """
 
 import re
 import numpy as np
+from PySide6.QtCore import QObject
+from settings.settings_manager import SettingsManager
 
-class TrayManager:
+class TrayManager(QObject):
 
-    def __init__(self) -> None:
-        pass
+    def __init__(self, settings_manager: SettingsManager) -> None:
+        super().__init__()
+        self.settings = settings_manager
 
-    def generar_matriz_coordenadas(self, tipo_mesa='Toda'):
+    def generar_matriz_cuadrantes(self, tipo_mesa='Toda'):
         """
         Genera las coordenadas (X, Y) teóricas para cada galleta en la bandeja.
-        Devuelve una matriz numpy de 7 filas x 6 columnas.
+        Usa 'quadrant_size' y 'table_size' definidos en parameters.json.
         """
-        # Definir espaciados según el tipo de mesa configurado
+        
+        # 1. Obtener dimensiones de la configuración
+        # table_size: [filas, columnas], ej: [7, 5]
+        table_size = self.settings.get("table_size", [7, 6]) 
+        rows = int(table_size[0])
+        cols = int(table_size[1])
+
+        # quadrant_size: [ancho_mm, alto_mm], ej: [103, 103]
+        q_size = self.settings.get("quadrant_size", [103.0, 103.0])
+        base_w = float(q_size[0])
+        base_h = float(q_size[1])
+
+        # 2. Calcular espaciados según el modo seleccionado
+        # Si es intercalado, saltamos un cuadrante (doble distancia)
+        espaciado_x = base_w
+        espaciado_y = base_h
+
         if tipo_mesa == 'Intercalado en Y':
-            espaciado_x = 103
-            espaciado_y = 206
+            espaciado_y = base_h * 2
         elif tipo_mesa == 'Intercalado en X':
-            espaciado_x = 206
-            espaciado_y = 103
+            espaciado_x = base_w * 2
         elif tipo_mesa == 'Intercalado en XY':
-            espaciado_x = 206
-            espaciado_y = 206
-        else: # 'Toda' (Default)
-            espaciado_x = 103
-            espaciado_y = 103
+            espaciado_x = base_w * 2
+            espaciado_y = base_h * 2
+        
+        # 3. Crear matriz numpy para guardar coordenadas [x, y]
+        matriz_coordenadas = np.zeros((rows, cols, 2))
 
-        # Crear matriz 7x6 para guardar coordenadas [x, y]
-        matriz_coordenadas = np.zeros((7, 6, 2))
-
-        for i in range(7):  # Filas
-            for j in range(6):  # Columnas
+        for i in range(rows):  # Filas
+            for j in range(cols):  # Columnas
                 x = espaciado_x * j
-                # Asumimos que las filas van hacia Y negativo
-                y = espaciado_y * i * -1 
+                # Asumimos que las filas van hacia Y positivo,
+                y = espaciado_y * i #* -1
                 matriz_coordenadas[i, j] = [x, y]
 
         return matriz_coordenadas
@@ -59,7 +73,6 @@ class TrayManager:
                 x = float(x_match.group(1))
                 y = float(y_match.group(1))
                 if not (x_min <= x <= x_max and y_min <= y <= y_max):
-                    # print(f"Fuera de límites: {linea.strip()}") # Debug
                     return False
 
             elif x_match:

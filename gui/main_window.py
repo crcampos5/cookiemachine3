@@ -61,7 +61,7 @@ class MainWindow(QMainWindow):
 
     def setup_threads(self):
         # 1. FluidNC
-        self.controller = MachineController()
+        self.controller = MachineController(self.settings_manager)
         self.fluidnc_thread = QThread()
         self.controller.moveToThread(self.fluidnc_thread)
         
@@ -188,6 +188,7 @@ class MainWindow(QMainWindow):
         
         # 3. JobController -> Hardware
         self.job.request_command.connect(self.connection.send_line)
+        self.job.request_move_tool.connect(self.controller.move_to_tool)
         self.job.request_lighting_on.connect(lambda: self.lighting.set_color_all(255, 255, 255))
         self.job.request_lighting_off.connect(self.lighting.leds_off)
         self.job.request_laser_on.connect(self.lighting.laser_on_full)
@@ -219,6 +220,9 @@ class MainWindow(QMainWindow):
         # --- Cameras ---
         self.cam_driver_central.frame_captured.connect(self.camera_widget.set_image)
         self.cam_driver_laser.frame_captured.connect(self.laser_widget.set_image)
+        self.job.processed_image_ready.connect(self.camera_widget.show_static_image)
+        self.job.job_finished.connect(self.camera_widget.enable_video)
+        self.job.job_stopped.connect(self.camera_widget.enable_video)
         QTimer.singleShot(2000, self.cam_driver_central.start)
         QTimer.singleShot(2000, self.cam_driver_laser.start)
 

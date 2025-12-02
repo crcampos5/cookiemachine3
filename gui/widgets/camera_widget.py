@@ -34,38 +34,53 @@ class CameraWidget(QGroupBox):
         layout.addWidget(self.image_label)
         self.setLayout(layout)
 
+        # Bandera para controlar si permitimos video en vivo
+        self.updates_enabled = True
+
     @Slot(np.ndarray)
     def set_image(self, frame: np.ndarray):
         """
-        Recibe un frame de OpenCV (BGR), lo convierte a Qt (RGB) y lo muestra.
+        Recibe frames del video en vivo.
+        Solo actualiza si updates_enabled es True.
         """
-        if frame is None:
-            return
+        if self.updates_enabled:
+            self._render_frame(frame)
+
+    @Slot(np.ndarray)
+    def show_static_image(self, frame: np.ndarray):
+        """
+        Muestra una imagen procesada (Debug) y BLOQUEA el video en vivo
+        para que no se sobrescriba inmediatamente.
+        """
+        self.updates_enabled = False
+        self._render_frame(frame)
+
+    @Slot()
+    def enable_video(self):
+        """Reactiva el flujo de video en vivo."""
+        self.updates_enabled = True
+
+    def _render_frame(self, frame: np.ndarray):
+        """Lógica interna de conversión y pintado en el QLabel."""
+        if frame is None: return
 
         try:
-            # 1. Convertir color BGR -> RGB
             rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            
-            # 2. Obtener dimensiones
             h, w, ch = rgb_image.shape
             bytes_per_line = ch * w
-            
-            # 3. Crear imagen Qt
             q_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
             
-            # 4. Escalar al tamaño actual del label manteniendo proporción
-            # Esto evita que la imagen se deforme al estirar la ventana
             pixmap = QPixmap.fromImage(q_image)
-            scaled_pixmap = pixmap.scaled(
-                self.image_label.size(),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation
-            )
-            
-            self.image_label.setPixmap(scaled_pixmap)
-            
+            # Escalar si el label ya tiene tamaño
+            if self.image_label.width() > 0 and self.image_label.height() > 0:
+                scaled_pixmap = pixmap.scaled(
+                    self.image_label.size(),
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation
+                )
+                self.image_label.setPixmap(scaled_pixmap)
+            else:
+                self.image_label.setPixmap(pixmap)
+                
         except Exception as e:
             print(f"Error visualizando frame: {e}")
-
-    # Nota: Ya no necesitamos start_feed ni stop_feed aquí,
-    # porque el control lo tiene el CameraDriver en el núcleo.
