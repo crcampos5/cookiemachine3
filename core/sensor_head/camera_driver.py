@@ -13,6 +13,7 @@ class CameraDriver(QObject):
     frame_captured = Signal(np.ndarray)
     error_occurred = Signal(str)
     status_changed = Signal(str)
+    parameters_loaded = Signal(dict)
 
     def __init__(self, camera_name: str, settings_manager: SettingsManager):
         super().__init__()
@@ -38,6 +39,8 @@ class CameraDriver(QObject):
         self.camera_matrix = None
         self.dist_coeffs = None
         self.calibration_enabled = False
+        self.target_brightness = 130  # Valor ideal de brillo (calibrar con una foto buena)
+        self.auto_exposure_active = False
         self._auto_load_calibration()
 
     def _parse_config(self):
@@ -105,14 +108,105 @@ class CameraDriver(QObject):
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.req_height)
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
+        # --- TRUCO: "Calentar" la cámara ---
+        # Muchas cámaras ignoran la configuración si no están transmitiendo.
+        # Leemos un frame vacío para forzar al driver a iniciar el stream.
+        self.cap.read()
+        QThread.msleep(200) # Esperamos 200ms a que el hardware despierte
+
+        # ---------------------------------------------------------
+        # 3. APLICAR PARÁMETROS DEL JSON (Si existen)
+        # ---------------------------------------------------------
+        # Buscamos 'exposure' o la errata 'expositure'
+        req_exp = self.config.get("exposure", None)
+        req_focus = self.config.get("focus", None)
+        req_af = self.config.get("autofocus", None)
+
+        # PASO A: Desactivar Autofocus (CRÍTICO: Hacerlo primero y esperar)
+        if req_af is not None:
+            val_af = 1 if (req_af is True or req_af == 1) else 0
+            self.cap.set(cv2.CAP_PROP_AUTOFOCUS, val_af)
+            # Esperar a que la lente mecánica se detenga o el driver cambie de modo
+            QThread.msleep(300) 
+
+        # PASO B: Configurar Exposición
+        if req_exp is not None:
+            self.cap.set(cv2.CAP_PROP_EXPOSURE, float(req_exp))
+            QThread.msleep(100)
+
+        # PASO C: Configurar Foco Manual (Con reintento)
+        if req_focus is not None:
+            target_focus = float(req_focus)
+            
+            # Primer intento
+            self.cap.set(cv2.CAP_PROP_FOCUS, target_focus)
+            QThread.msleep(100)
+            
+            # Verificación: ¿Hizo caso?
+            current_focus = self.cap.get(cv2.CAP_PROP_FOCUS)
+            
+            # Si el foco actual difiere del deseado (con un margen de error de 1)
+            # O si se quedó "pegado" en un valor por defecto (como 144)
+            if abs(current_focus - target_focus) > 2:
+                print(f"[{self.camera_name}] Foco rebelde ({current_focus}). Reintentando poner a {target_focus}...")
+                
+                # A veces ayuda moverlo a 0 y luego al valor deseado para "despegarlo"
+                self.cap.set(cv2.CAP_PROP_FOCUS, 0) 
+                QThread.msleep(50)
+                self.cap.set(cv2.CAP_PROP_FOCUS, target_focus)
+                QThread.msleep(100)
+
+        # ---------------------------------------------------------
+        # 4. LEER VALORES REALES DEL HARDWARE (LO QUE PIDE EL USUARIO)
+        # ---------------------------------------------------------
+        
+
         self.is_running = True
         
         while self.is_running:
             ret, frame = self.cap.read()
             if ret:
+                # --- LOGICA DE COMPENSACIÓN DE LUZ ---
+                if self.auto_exposure_active:
+                    # 1. Medir brillo actual
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    current_brightness = np.mean(gray)
+                    
+                    # 2. Obtener exposición actual
+                    current_exp = self.cap.get(cv2.CAP_PROP_EXPOSURE)
+                    
+                    # 3. Ajustar si estamos lejos del objetivo (Histéresis para que no parpadee)
+                    error = self.target_brightness - current_brightness
+                    
+                    if abs(error) > 15: # Si la diferencia es notable
+                        step = 1 if error > 0 else -1
+                        new_exp = current_exp + step
+                        
+                        # Límites de seguridad (ej: entre -13 y -1)
+                        if -13 <= new_exp <= -1:
+                            self.cap.set(cv2.CAP_PROP_EXPOSURE, new_exp)
+                            # Esperar un poco a que el hardware reaccione
+                            QThread.msleep(200) 
+                # -------------------------------------
                 # Aplicar distorsión si se cargaron las matrices
                 if self.calibration_enabled and self.camera_matrix is not None:
                     frame = cv2.undistort(frame, self.camera_matrix, self.dist_coeffs)
+                
+                real_exposure = self.cap.get(cv2.CAP_PROP_EXPOSURE)
+                real_focus = self.cap.get(cv2.CAP_PROP_FOCUS)
+                real_af = self.cap.get(cv2.CAP_PROP_AUTOFOCUS)
+
+                # Empaquetar para la GUI
+                # Nota: real_exposure suele dar valores negativos en Windows (ej: -6)
+                
+                hardware_params = {
+                    "exposure": f"{real_exposure:.1f}",
+                    "focus": f"{real_focus:.1f}",
+                    "autofocus": "ON" if real_af == 1 else "OFF"
+                }
+                
+                # Emitir señal
+                self.parameters_loaded.emit(hardware_params)
                 
                 self.frame_captured.emit(frame)
             else:
@@ -120,6 +214,10 @@ class CameraDriver(QObject):
             QThread.msleep(10)
         
         self.cap.release()
+
+    @Slot(bool)
+    def set_auto_exposure_logic(self, active: bool):
+        self.auto_exposure_active = active
 
     @Slot()
     def stop(self):

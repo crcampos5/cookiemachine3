@@ -123,7 +123,8 @@ class InjectorPanel(QGroupBox):
             self.injectors.append(strip)
             
         self.setLayout(layout)
-        self.setMaximumHeight(240)
+        self.setMaximumHeight(300)
+        self.setMinimumHeight(240)
 
     @Slot(dict)
     def apply_startup_config(self, injectors_config: dict):

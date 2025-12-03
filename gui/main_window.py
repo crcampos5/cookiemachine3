@@ -220,6 +220,8 @@ class MainWindow(QMainWindow):
         # --- Cameras ---
         self.cam_driver_central.frame_captured.connect(self.camera_widget.set_image)
         self.cam_driver_laser.frame_captured.connect(self.laser_widget.set_image)
+        self.cam_driver_central.parameters_loaded.connect(self.camera_widget.update_info)
+        self.cam_driver_laser.parameters_loaded.connect(self.laser_widget.update_info)
         self.job.processed_image_ready.connect(self.camera_widget.show_static_image)
         self.job.job_finished.connect(self.camera_widget.enable_video)
         self.job.job_stopped.connect(self.camera_widget.enable_video)

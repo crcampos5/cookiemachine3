@@ -177,3 +177,17 @@ def is_point_near_list(point, point_list, threshold=2.5):
         if is_point_near(point, p, threshold):
             return True
     return False
+
+def get_image_brightness(image):
+    """
+    Calcula el brillo promedio de la imagen.
+    Retorna un valor float entre 0 (negro absoluto) y 255 (blanco absoluto).
+    """
+    if image is None: return 0.0
+    
+    # Convertimos a espacio de color HSV y extraemos el canal V (Value/Brillo)
+    # Es más preciso que usar escala de grises para visión por color.
+    hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
+    v_channel = hsv[:,:,2]
+    
+    return np.mean(v_channel)
