@@ -224,23 +224,22 @@ class JobController(QObject):
                 if not centroids:
                     self.log_message.emit("⚠️ No se detectó galleta. Saltando.")
                     continue
+
+                cx, cy, angle = centroids[0]
                 
-                centro_img = (320, 240) 
-                sorted_centroids = vision.sort_points_by_distance(centroids, centro_img)
-                pixel_galleta = sorted_centroids[0]
-                
-                pos_real = vision.convert_pixel_to_mm(pixel_galleta, pos_camara, (640, 480), self.valor_pixel_to_mm)
+                pos_real = vision.convert_pixel_to_mm((cx, cy), pos_camara, (640, 480), self.valor_pixel_to_mm)
                 self.log_message.emit(f"🎯 Galleta en: {pos_real}")
 
                 # --- PASO 2: ESCANEO ---
-                offset_x = pos_real[0]
-                offset_y = pos_real[1]
+                offset_x = pos_real[0] - self._centro_camera[0]
+                offset_y = pos_real[1] - self._centro_camera[1]
                 
                 scan_route_real = self.processor.sumar_offset_xy(gcode_scan, offset_x, offset_y)
                 
                 self.request_lighting_off.emit()
+                time.sleep(0.3)
                 self.request_laser_on.emit()
-                time.sleep(0.2)
+                time.sleep(0.5)
                 
                 alturas_leidas = self._run_scan_routine(scan_route_real)
                 
@@ -316,12 +315,13 @@ class JobController(QObject):
     def _run_scan_routine(self, gcode_scan):
         puntos_leidos = []
         patron = re.compile(r'X([-+]?\d*\.\d+)\s*Y([-+]?\d*\.\d+)')
+        self.request_command.emit("F500")
         
         for line in gcode_scan:
             if not self._is_running: break
             
             self.request_command.emit(line)
-            time.sleep(0.05)
+            #time.sleep(0.05)
             self._wait_for_idle()
             
             match = patron.search(line)
