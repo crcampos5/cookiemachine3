@@ -375,4 +375,4 @@ class GcodeProcessor:
                 curr_x = target_x
                 curr_y = target_y
 
-        return "\n".join(new_gcode)
+        return new_gcode

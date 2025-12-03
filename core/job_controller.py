@@ -59,6 +59,7 @@ class JobController(QObject):
         table_size = self.settings.get("table_size")
         self.rows = table_size[0]
         self.cols = table_size[1]
+        self.valor_pixel_to_mm = self.settings.get("valor_pixel_to_mm")
 
     # --- SLOTS DE ENTRADA ---
 
@@ -228,7 +229,7 @@ class JobController(QObject):
                 sorted_centroids = vision.sort_points_by_distance(centroids, centro_img)
                 pixel_galleta = sorted_centroids[0]
                 
-                pos_real = vision.convert_pixel_to_mm(pixel_galleta, pos_camara)
+                pos_real = vision.convert_pixel_to_mm(pixel_galleta, pos_camara, (640, 480), self.valor_pixel_to_mm)
                 self.log_message.emit(f"🎯 Galleta en: {pos_real}")
 
                 # --- PASO 2: ESCANEO ---

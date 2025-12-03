@@ -63,8 +63,8 @@ def find_cookie_pose(image):
         - debug_image: Imagen con cajas rotadas dibujadas.
     """
     # 1. Configuración de color (Amarillo/Dorado)
-    color_bajos = np.array([20, 131, 0], np.uint8)
-    color_altos = np.array([40, 255, 255], np.uint8)
+    color_bajos = np.array([0, 0, 0], np.uint8)
+    color_altos = np.array([24, 255, 255], np.uint8)
     
     # 2. Pre-procesamiento
     kernel = np.ones((5,5), np.uint8)
@@ -81,7 +81,7 @@ def find_cookie_pose(image):
     for contour in cnts:
         area = cv.contourArea(contour)
         
-        if 1000 < area < 2000000:
+        if 80000 < area < 100000:
             # --- Cálculo de Momentos (Centroide) ---
             M = cv.moments(contour)
             if M["m00"] == 0: continue
