@@ -85,6 +85,19 @@ class LightingController(QObject):
         """
         self._send("CLEAR")
 
+    @Slot(int)
+    def leds_on(self, intensity: int):
+        """
+        Enciende el anillo en color BLANCO con la intensidad indicada.
+        intensity: Entero entre 0 (apagado) y 255 (máximo brillo).
+        """
+        # Aseguramos que el valor esté entre 0 y 255
+        val = max(0, min(255, intensity))
+        
+        # Para luz blanca, R, G y B tienen el mismo valor
+        self.set_color_all(val, val, val)
+
+
     # --- Comandos de Láser ---
 
     @Slot(int)

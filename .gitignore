@@ -3,6 +3,7 @@
 venv/
 *.venv/
 .venv/
+debug_imgs/
 
 # 2. Ignorar Caches de Python (forma mejorada)
 # (Tu .gitignore original listaba cada carpeta, esto captura todas)

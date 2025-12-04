@@ -191,3 +191,71 @@ def get_image_brightness(image):
     v_channel = hsv[:,:,2]
     
     return np.mean(v_channel)
+
+# ----------------------------------------------------------------------
+# AGREGAR AL FINAL DE core/vision_utils.py
+# ----------------------------------------------------------------------
+
+def calculate_height_sen(y_pixel):
+    """
+    Calcula la altura Z basada en la posición Y del centroide del láser.
+    Lógica portada de utilssensor.py
+    """
+    # Constantes de calibración hardcodeadas (según utilssensor.py)
+    FOV_V = 47.0
+    RESOLUTION_V = 1200.0
+    ACAM = 60.2
+    C = 91.6
+    b = 57.81  # Distancia láser-cámara
+
+    angle_to_pixel = FOV_V / RESOLUTION_V
+    # Nota: en utilssensor 'd' era el pixel y restaban 600 (mitad de 1200)
+    angle_menor = (y_pixel - 600) * angle_to_pixel
+    
+    A = angle_menor + ACAM
+    B = 180 - A - C
+
+    # Evitar división por cero
+    if math.sin(math.radians(B)) == 0:
+        return 0.0
+
+    a = b * math.sin(math.radians(A)) / math.sin(math.radians(B))
+    return a
+
+def analyzing_image(frame):
+    """
+    Procesa una imagen de láser para obtener la altura Z.
+    Retorna: Altura (float). Si no encuentra nada, retorna 0.0.
+    """
+    if frame is None: 
+        return 0.0
+        
+    # 1. Convertir a escala de grises
+    gris = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+    
+    # 2. Binarizar (Umbral fijo 127 según tu archivo)
+    _, imagen_binaria = cv.threshold(gris, 127, 255, cv.THRESH_BINARY)
+    
+    # 3. Encontrar contornos
+    cnts, _ = cv.findContours(imagen_binaria, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    
+    max_area = 0
+    best_y = 0
+    found = False
+    
+    if len(cnts) > 0:
+        for c in cnts:
+            a = cv.contourArea(c)
+            if a > max_area:
+                max_area = a
+                M = cv.moments(c)
+                if M['m00'] != 0:
+                    # x = M['m10']/M['m00'] # No necesitamos X para la altura
+                    best_y = M['m01'] / M['m00']
+                    found = True
+        
+        if found:
+            # Calcular altura usando la coordenada Y del centroide
+            return calculate_height_sen(best_y)
+            
+    return 0.0

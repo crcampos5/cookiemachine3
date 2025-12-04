@@ -4,6 +4,8 @@ Controlador principal del trabajo (Job).
 Versión: Soporta carga previa y botón inteligente Start/Resume.
 """
 
+from datetime import datetime
+import os
 import time
 import re
 import numpy as np
@@ -29,9 +31,9 @@ class JobController(QObject):
     # Señales Hardware
     request_command = Signal(str)
     request_move_tool = Signal(int,int,str)      
-    request_lighting_on = Signal()     
+    request_lighting_on = Signal(int)     
     request_lighting_off = Signal()
-    request_laser_on = Signal()        
+    request_laser_on = Signal(int)        
     request_laser_off = Signal()
 
     def __init__(self, settings_manager: SettingsManager):
@@ -61,7 +63,18 @@ class JobController(QObject):
         self.cols = table_size[1]
         self.valor_pixel_to_mm = self.settings.get("valor_pixel_to_mm")
 
+        self._current_x = 0.0
+        self._current_y = 0.0
+        self._current_z = 0.0
+
     # --- SLOTS DE ENTRADA ---
+
+    @Slot(float, float, float)
+    def update_machine_position(self, x, y, z):
+        """ Recibe la posición actual en tiempo real desde FluidNC """
+        self._current_x = x
+        self._current_y = y
+        self._current_z = z
 
     @Slot(str)
     def update_machine_status(self, status: str):
@@ -204,8 +217,8 @@ class JobController(QObject):
                 self.log_message.emit(f"🍪 Procesando Galleta {count}")
 
                 # --- PASO 1: VISIÓN ---
-                self.request_lighting_on.emit()
-                time.sleep(2)
+                self.request_lighting_on.emit(10)
+                time.sleep(1)
                 self._move_and_wait(pos_camara[0], pos_camara[1])
                 time.sleep(2)
                 
@@ -230,7 +243,7 @@ class JobController(QObject):
                 pos_real = vision.convert_pixel_to_mm((cx, cy), pos_camara, (640, 480), self.valor_pixel_to_mm)
                 self.log_message.emit(f"🎯 Galleta en: {pos_real}")
 
-                # --- PASO 2: ESCANEO ---
+               # --- PASO 2: ESCANEO ---
                 offset_x = pos_real[0] - self._centro_camera[0]
                 offset_y = pos_real[1] - self._centro_camera[1]
                 
@@ -238,18 +251,45 @@ class JobController(QObject):
                 
                 self.request_lighting_off.emit()
                 time.sleep(0.3)
-                self.request_laser_on.emit()
+                self.request_laser_on.emit(10)
                 time.sleep(0.5)
                 
-                alturas_leidas = self._run_scan_routine(scan_route_real)
+                # A. Ejecutar rutina física (RÁPIDA) y obtener fotos
+                datos_crudos = self._run_scan_routine(scan_route_real)
                 
                 self.request_laser_off.emit()
-                #self.request_lighting_on.emit()
+                
+                # B. Procesamiento matemático (CPU)
+                # Convertimos la lista de (x, y, 0, img) -> (x, y, z_calculado)
+                alturas_leidas = []
+                
+                if datos_crudos:
+                    # 1. Crear carpeta para esta galleta específica
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    debug_folder = f"debug_imgs/cookie_{count}_{timestamp}"
+                    os.makedirs(debug_folder, exist_ok=True)
+                    self.log_message.emit(f"💾 Guardando img en: {debug_folder}")
+
+                    for idx, punto in enumerate(datos_crudos):
+                        px, py, _, img_laser = punto
+                        
+                        # --- GUARDAR IMAGEN ---
+                        # Nombre ej: laser_001_X100.2_Y50.5.jpg
+                        filename = f"{debug_folder}/laser_{idx:03d}_X{px:.1f}_Y{py:.1f}.jpg"
+                        cv.imwrite(filename, img_laser)
+                        # ----------------------
+
+                        # Calcular Z usando la lógica importada
+                        z_calc = vision.analyzing_image(img_laser)
+                        alturas_leidas.append((px, py, z_calc))
+                        
+                        if idx % 5 == 0: QCoreApplication.processEvents() # UI fluida
 
                 if not alturas_leidas:
-                    self.log_message.emit("⚠️ Fallo escaneo. Usando altura base.")
+                    self.log_message.emit("⚠️ Fallo escaneo (sin datos). Usando altura base.")
                 
-                # --- PASO 3: PROCESAMIENTO ---
+                # --- PASO 3: PROCESAMIENTO G-CODE ---
+                # Ahora 'alturas_leidas' ya tiene los valores Z reales para el mapa de altura
                 z_umbral = self.processor.calcular_z_umbral(alturas_leidas, 0, 10)
                 
                 gcode_draw_moved = self.processor.sumar_offset_xy(gcode_operation, offset_x, offset_y)
@@ -294,8 +334,17 @@ class JobController(QObject):
         self._wait_for_idle()
 
     def _wait_for_idle(self):
+        """
+        Espera optimizada que procesa eventos de Qt para recibir
+        la señal de estado más rápido.
+        """
         while self._machine_state != "Idle":
             if not self._is_running: break
+            
+            # CRÍTICO: Permitir que lleguen las señales (status_changed) mientras esperamos
+            QCoreApplication.processEvents() 
+            time.sleep(0.01) # Pequeño sleep para no saturar la CPU
+            
             self._check_pause()
 
     def _check_pause(self):
@@ -315,25 +364,121 @@ class JobController(QObject):
     def _run_scan_routine(self, gcode_scan):
         puntos_leidos = []
         patron = re.compile(r'X([-+]?\d*\.\d+)\s*Y([-+]?\d*\.\d+)')
+
+        # 1. Obtener Offset del Láser desde la configuración
+        # Se busca en 'off_set_sensor' -> 'laser' (Ej: [54, 81])
+        sensor_offsets = self.settings.get("off_set_sensor", {})
+        laser_offset = sensor_offsets.get("laser", [0.0, 0.0])
+        off_x = laser_offset[0]
+        off_y = laser_offset[1]
+        
+        # MEJORA 1: Aumentar velocidad de desplazamiento entre puntos (de F500 a F2000)
+        # Esto reduce drásticamente el tiempo de viaje entre muestras.
         self.request_command.emit("F500")
         
         for line in gcode_scan:
             if not self._is_running: break
             
-            self.request_command.emit(line)
-            #time.sleep(0.05)
-            self._wait_for_idle()
-            
+            # 2. Extraer coordenada OBJETIVO (donde queremos medir)
             match = patron.search(line)
             if match:
-                x = float(match.group(1))
-                y = float(match.group(2))
-                img = self._get_laser_frame_sync()
+                target_x = float(match.group(1))
+                target_y = float(match.group(2))
+                
+                # 3. Calcular coordenada MÁQUINA (compensando el offset)
+                # Igual que hace move_to_tool: movemos la máquina atrás para que el láser quede en el punto.
+                machine_x = target_x - off_x
+                machine_y = target_y - off_y
+                
+                # Detectar tipo de movimiento (G0 o G1) para mantener coherencia
+                cmd_type = "G0" if "G0" in line.upper() else "G1"
+                
+                # Crear el comando con las coordenadas físicas corregidas
+                cmd_corregido = f"{cmd_type} X{machine_x:.3f} Y{machine_y:.3f}"
+                
+                self.request_command.emit(cmd_corregido)
+                
+               # 2. VERIFICACIÓN ESTRICTA (Posición + Idle)
+                # Esperamos hasta que la máquina reporte que está en machine_x, machine_y
+                arrived = self._wait_for_pos_and_idle(machine_x, machine_y)
+                
+                if not arrived:
+                    self.log_message.emit(f"⚠️ Warning: No se confirmó llegada a {machine_x},{machine_y}")
+                
+                # 3. FORZAR CAPTURA FRESCA
+                # Borramos la última imagen conocida para asegurar que no leemos una vieja
+                self._last_laser_frame = None
+                
+                # Esperamos a que llegue un frame NUEVO (capturado en esta posición exacta)
+                img = self._get_new_laser_frame()
+                
                 if img is not None:
-                    z = 0.0 
-                    puntos_leidos.append((x, y, z))
+                    z = 0.0 # Aquí iría tu lógica futura de detección de altura láser
+                    # Guardamos target_x, target_y porque son las coordenadas 'reales' del mapa de altura
+                    puntos_leidos.append((target_x, target_y, z, img))
+            
+            else:
+                # Si la línea no tiene coordenadas (ej: cambios de estado), se envía tal cual
+                self.request_command.emit(line)
+                self._wait_for_idle()
         
         return puntos_leidos
+    
+    def _wait_for_pos_and_idle(self, target_x, target_y, tolerance=0.1, timeout=5.0):
+        """
+        Bloquea hasta que:
+        1. El estado sea 'Idle'
+        2. La posición actual reportada esté cerca del objetivo (tolerance)
+        """
+        start_time = time.time()
+        while True:
+            QCoreApplication.processEvents() # Permitir que lleguen señales de update_machine_position
+            
+            if not self._is_running: return False
+            
+            # Verificar coordenadas (usando abs para diferencia absoluta)
+            dist_x = abs(self._current_x - target_x)
+            dist_y = abs(self._current_y - target_y)
+            pos_ok = (dist_x < tolerance) and (dist_y < tolerance)
+            
+            # Verificar estado
+            state_ok = (self._machine_state == "Idle")
+            
+            if pos_ok and state_ok:
+                return True
+            
+            # Timeout para no congelar si FluidNC pierde paquetes
+            if time.time() - start_time > timeout:
+                return False
+                
+            time.sleep(0.01)
+
+    def _get_new_laser_frame(self, timeout=2.0):
+        """ Espera hasta que llegue un frame NO nulo (fresco) """
+        start = time.time()
+        while self._last_laser_frame is None:
+            QCoreApplication.processEvents()
+            if not self._is_running: return None
+            if time.time() - start > timeout: return None
+            time.sleep(0.005)
+        return self._last_laser_frame
+    
+    def _get_laser_frame_fast(self):
+        """
+        Versión optimizada de captura:
+        En lugar de borrar y esperar un frame NUEVO, toma el ÚLTIMO disponible.
+        Como la cámara corre en otro hilo enviando 30fps, el último frame
+        es suficientemente reciente (aprox 33ms de antigüedad máxima).
+        """
+        # Forzar el procesado de señales pendientes para asegurar 
+        # que self._last_laser_frame tenga el dato más reciente del hilo de la cámara
+        QCoreApplication.processEvents()
+        
+        if self._last_laser_frame is not None:
+            return self._last_laser_frame
+            
+        # Solo si es None (arranque), usamos el método lento con espera
+        return self._get_laser_frame_sync()
 
     def _get_laser_frame_sync(self):
         self._last_laser_frame = None

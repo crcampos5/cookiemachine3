@@ -189,15 +189,16 @@ class MainWindow(QMainWindow):
         # 3. JobController -> Hardware
         self.job.request_command.connect(self.connection.send_line)
         self.job.request_move_tool.connect(self.controller.move_to_tool)
-        self.job.request_lighting_on.connect(lambda: self.lighting.set_color_all(255, 255, 255))
+        self.job.request_lighting_on.connect(self.lighting.leds_on)
         self.job.request_lighting_off.connect(self.lighting.leds_off)
-        self.job.request_laser_on.connect(self.lighting.laser_on_full)
+        self.job.request_laser_on.connect(self.lighting.set_laser_power)
         self.job.request_laser_off.connect(self.lighting.laser_off)
         
         # 4. Hardware -> JobController
         self.cam_driver_central.frame_captured.connect(self.job.update_main_frame)
         self.cam_driver_laser.frame_captured.connect(self.job.update_laser_frame)
         self.controller.status_changed.connect(self.job.update_machine_status)
+        self.controller.position_updated.connect(self.job.update_machine_position)
 
         # --- FluidNC Internals ---
         self.fluidnc_thread.started.connect(self.controller.initialize_thread)
