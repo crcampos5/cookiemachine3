@@ -13,7 +13,9 @@ from core.machine_controller import MachineController
 from core.serial_connection import SerialConnection
 from core.job_controller import JobController 
 from core.sensor_head.lighting_controller import LightingController
-from core.sensor_head.camera_driver import CameraDriver
+#from core.sensor_head.camera_driver import CameraDriver
+from core.sensor_head.cam_central import CamCentral
+from core.sensor_head.cam_laser import CamLaser
 
 # --- Widgets ---
 from gui.widgets.connect_panel import ConnectPanel
@@ -76,11 +78,11 @@ class MainWindow(QMainWindow):
         self.arduino_conn.moveToThread(self.arduino_conn_thread)
         
         # 3. Cámaras
-        self.cam_driver_central = CameraDriver("cam_central", self.settings_manager)
+        self.cam_driver_central = CamCentral( self.settings_manager)
         self.cam1_thread = QThread()
         self.cam_driver_central.moveToThread(self.cam1_thread)
 
-        self.cam_driver_laser = CameraDriver("cam_laser", self.settings_manager)
+        self.cam_driver_laser = CamLaser( self.settings_manager)
         self.cam2_thread = QThread()
         self.cam_driver_laser.moveToThread(self.cam2_thread)
 
@@ -223,6 +225,8 @@ class MainWindow(QMainWindow):
         self.cam_driver_laser.frame_captured.connect(self.laser_widget.set_image)
         self.cam_driver_central.parameters_loaded.connect(self.camera_widget.update_info)
         self.cam_driver_laser.parameters_loaded.connect(self.laser_widget.update_info)
+        self.cam_driver_laser.distance_updated.connect(self.info_panel.update_laser_distance)
+        self.info_panel.request_laser_monitoring.connect(self.cam_driver_laser.set_laser_monitoring)
         self.job.processed_image_ready.connect(self.camera_widget.show_static_image)
         self.job.job_finished.connect(self.camera_widget.enable_video)
         self.job.job_stopped.connect(self.camera_widget.enable_video)

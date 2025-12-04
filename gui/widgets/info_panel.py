@@ -4,8 +4,8 @@ Widget para mostrar la información de estado (Idle, Run, Alarm),
 las coordenadas de la máquina (X, Y, Z) y un registro de mensajes.
 """
 
-from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QFormLayout, QLabel, QTextEdit
-from PySide6.QtCore import Slot
+from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QFormLayout, QLabel, QTextEdit, QHBoxLayout, QCheckBox
+from PySide6.QtCore import Slot, Signal
 from PySide6.QtGui import QColor, QPalette, QFont
 
 class InfoPanel(QGroupBox):
@@ -13,6 +13,8 @@ class InfoPanel(QGroupBox):
     Este widget (panel) muestra toda la información pasiva 
     recibida desde el MachineController.
     """
+
+    request_laser_monitoring = Signal(bool)
     
     def __init__(self, parent=None):
         super().__init__("Estado y Registros", parent)
@@ -20,6 +22,8 @@ class InfoPanel(QGroupBox):
         # --- Layouts ---
         main_layout = QVBoxLayout()
         position_layout = QFormLayout()
+        data_layout = QHBoxLayout()
+        dlaser_layout = QHBoxLayout()
         
         # --- 1. Etiqueta de Estado de la Máquina ---
         self.state_label = QLabel("DESCONECTADO")
@@ -43,9 +47,20 @@ class InfoPanel(QGroupBox):
         y_label.setStyleSheet(style_pos)
         z_label = QLabel("Z:")
         z_label.setStyleSheet(style_pos)
+        self.check_laser = QCheckBox("D:")
+        self.check_laser.setStyleSheet(style_pos)
+        self.check_laser.setToolTip("Activar medición de distancia en tiempo real")
+        self.d_pos_label = QLabel("---")
+        self.d_pos_label.setStyleSheet(style_pos)
+        dlaser_layout.addWidget(self.check_laser)
+        dlaser_layout.addWidget(self.d_pos_label)
+
         position_layout.addRow(x_label, self.x_pos_label)
         position_layout.addRow(y_label, self.y_pos_label)
         position_layout.addRow(z_label, self.z_pos_label)
+
+        data_layout.addLayout(position_layout)
+        data_layout.addLayout(dlaser_layout)
         
         # --- 3. Registro de Mensajes ---
         self.log_text = QTextEdit()
@@ -54,11 +69,13 @@ class InfoPanel(QGroupBox):
         
         # --- Ensamblaje ---
         main_layout.addWidget(self.state_label)
-        main_layout.addLayout(position_layout)
+        main_layout.addLayout(data_layout)
         #main_layout.addWidget(QLabel("Registro:"))
         main_layout.addWidget(self.log_text, 1) # El '1' le da espacio extra
         
         self.setLayout(main_layout)
+
+        self.check_laser.toggled.connect(self.request_laser_monitoring)
 
     # --- Slots (para ser llamados desde MainWindow) ---
 
@@ -95,6 +112,11 @@ class InfoPanel(QGroupBox):
         self.x_pos_label.setText(f"{x:.3f} mm")
         self.y_pos_label.setText(f"{y:.3f} mm")
         self.z_pos_label.setText(f"{z:.3f} mm")
+    
+    @Slot(float)
+    def update_laser_distance(self, d: float):
+        """ Actualiza la etiqueta de distancia láser. """
+        self.d_pos_label.setText(f"{d:.3f} mm")
 
     @Slot(str)
     def add_log(self, message: str):
